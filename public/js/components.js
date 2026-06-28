@@ -1138,6 +1138,10 @@ const Components = {
   },
 
   async deleteCategory(id) {
+    if (window.currentUser && window.currentUser.isGuest) {
+      Utils.showToast('Managing custom categories is disabled in Guest Mode. Upgrade to save changes.', 'error');
+      return;
+    }
     try {
       await API.deleteCategory(id);
       Utils.showToast('Category deleted successfully');
@@ -1149,6 +1153,10 @@ const Components = {
 
   async createCategory(event) {
     event.preventDefault();
+    if (window.currentUser && window.currentUser.isGuest) {
+      Utils.showToast('Creating custom categories is disabled in Guest Mode. Upgrade to save changes.', 'error');
+      return;
+    }
     const name = document.getElementById('cat-name').value.trim();
     const color = document.getElementById('cat-color').value;
     const icon = document.getElementById('cat-icon').value;
@@ -1164,6 +1172,10 @@ const Components = {
   },
 
   async exportWorkspaceData() {
+    if (window.currentUser && window.currentUser.isGuest) {
+      Utils.showToast('Workspace backup exports are disabled in Guest Mode.', 'error');
+      return;
+    }
     try {
       const data = await API.exportData();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1180,6 +1192,11 @@ const Components = {
   },
 
   async importWorkspaceData(event) {
+    if (window.currentUser && window.currentUser.isGuest) {
+      Utils.showToast('Restoring database backups is disabled in Guest Mode.', 'error');
+      event.target.value = '';
+      return;
+    }
     const file = event.target.files[0];
     if (!file) return;
 

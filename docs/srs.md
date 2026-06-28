@@ -111,4 +111,5 @@ The system consists of:
 | v0.4 | 2026-06-28 | Completed | Built interactive Kanban Board with HTML5 drag-and-drop status relocations, filterable task list views, and a detailed task management modal (Module 4 complete). |
 | v0.5 | 2026-06-28 | Completed | Built deadline calendars with navigations, Global focus tracker time-logger triggers, and workload/time-spent analytics dashboards via Chart.js (Module 5 complete). |
 | v1.0 | 2026-06-28 | Completed | Built global activity audit log streams, custom category managers, and JSON data backup export & import recovery modules (Module 6 complete). |
+| v2.0 | 2026-06-28 | Completed | Integrated MongoDB database migration, JWT Authentication (Login/Signup), Guest sandboxed session reseedings, and Role-Based Access Control (RBAC). |
 

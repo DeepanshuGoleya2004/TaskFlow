@@ -73,6 +73,17 @@ This report tracks the development status of the Premium Task Tracker applicatio
   - Coded Category creation and deletion controls inside Settings, allowing custom categories setup.
   - Coded JSON data portability, offering data backup exports (triggering local file downloads) and database imports/restoration (deleting database and sequentially rebuilding tasks, categories, logs, and comment streams).
 
+### Module 7: JWT Authentication & RBAC Authorization
+- **Status**: Completed ✅
+- **Date Completed**: 2026-06-28
+- **Deliverables**: `models/User.js`, `routes/auth.js`, `middleware/auth.js`
+- **Summary**:
+  - Migrated backend persistence fully from SQLite to MongoDB to support unified schemas and query relationships.
+  - Developed full signup validation pipelines checking unique email handles and enforcing password complexity criteria.
+  - Configured JWT tokens login security and automatic session retention.
+  - Coded Guest sandboxed session login: when launched, wipes previous records and reseeds default demo tasks, showing warning notification banners, and locking backups and custom category creations.
+  - Configured Role-Based Access Controls (RBAC) scoping metrics, comments, and task modifications.
+
 ---
 
 ## 3. Test & Quality Control Log
@@ -85,6 +96,8 @@ This report tracks the development status of the Premium Task Tracker applicatio
 | 2026-06-28 | Module 4 | Integration logic tests | PASSED ✅ | Verified Kanban state changes, filter bar selections, comments additions, and modal creation saves. |
 | 2026-06-28 | Module 5 | Interactive component tests | PASSED ✅ | Tested month navigations, Chart.js integrations, Pomodoro timers countdown transitions, and task auto-logs. |
 | 2026-06-28 | Module 6 | Portability and audit tests | PASSED ✅ | Tested JSON downloads, database recovery resets, custom categories addition, and global timelines. |
+| 2026-06-28 | Module 7 | `node test_auth.js` | PASSED ✅ | Tested password strength validations, duplicate registration blockades, JWT allocations, and profile retrieval checks. |
+| 2026-06-28 | Module 7 | `node test_mongoose_api.js` | PASSED ✅ | Tested scoped task lists, comments posts, dashboard aggregate recalculations, and deletion cascades on MongoDB. |
 
 ---
 

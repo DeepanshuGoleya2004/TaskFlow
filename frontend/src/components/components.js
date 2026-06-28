@@ -1225,3 +1225,5 @@ const Components = {
     reader.readAsText(file);
   }
 };
+
+window.Components = Components;

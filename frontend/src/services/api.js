@@ -142,3 +142,5 @@ const API = {
     return this.request('POST', '/auth/logout');
   }
 };
+
+window.API = API;

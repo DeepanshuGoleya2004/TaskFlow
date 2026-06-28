@@ -1,3 +1,4 @@
+require('dotenv').config();
 // Zenith Task Tracker Server Entry
 const express = require('express');
 const cors = require('cors');
@@ -15,6 +16,9 @@ app.use(morgan('dev'));
 
 // Serve Static Frontend Files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Mount Authentication Router
+app.use('/api/auth', require('./routes/auth'));
 
 // Base Health Check Route
 app.get('/api/health', (req, res) => {

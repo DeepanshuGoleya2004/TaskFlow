@@ -970,15 +970,241 @@ const Components = {
       estimated_minutes: estimated_minutes ? parseInt(estimated_minutes) : 0
     };
 
-    try {
-      await API.createTask(payload);
-      Utils.showToast('Task created successfully');
-      closeModal();
+  },
 
-      if (window.currentView === 'kanban') this.renderKanban('view-kanban');
-      if (window.currentView === 'list') this.renderList('view-list');
+  // ==========================================
+  // 5. Activity Logs View Component
+  // ==========================================
+  async renderLogs(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading audit logs...</div>';
+
+    try {
+      const logs = await API.getActivityLogs();
+
+      if (logs.length === 0) {
+        container.innerHTML = `
+          <div class="glass-panel" style="text-align: center; color: var(--text-muted); padding: 3rem 1rem;">
+            No activities recorded in the workspace yet.
+          </div>
+        `;
+        return;
+      }
+
+      let html = `
+        <div class="glass-panel">
+          <h2 style="font-family: var(--font-heading); margin-bottom: 1.5rem; font-size: 1.3rem;">Workspace Activity Timeline</h2>
+          <div class="logs-timeline">
+      `;
+
+      logs.forEach(log => {
+        const actionClass = log.action;
+        const date = new Date(log.created_at);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+        const taskRef = log.task_title ? ` on <strong style="color: var(--primary); cursor: pointer;" onclick="Components.showTaskDetails(${log.task_id})">${log.task_title}</strong>` : '';
+
+        html += `
+          <div class="log-item">
+            <span class="log-dot ${actionClass}"></span>
+            <div class="log-meta">
+              <span class="log-actor">${log.user_name || 'System'}</span>
+              <span>•</span>
+              <span>${dateStr} at ${timeStr}</span>
+            </div>
+            <div class="log-details">${log.details}${taskRef}</div>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
     } catch (err) {
-      Utils.showToast(`Failed to create task: ${err.message}`, 'error');
+      container.innerHTML = `<div class="error-msg">Error loading activity logs: ${err.message}</div>`;
     }
+  },
+
+  // ==========================================
+  // 6. Settings Component (Categories, Backup Portability)
+  // ==========================================
+  async renderSettings(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading settings...</div>';
+
+    try {
+      this.categories = await API.getCategories();
+
+      let categoryListHtml = '';
+      this.categories.forEach(c => {
+        const isSystem = c.id <= 4;
+        const catStyle = Utils.getCategoryStyle(c.color);
+        
+        categoryListHtml += `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); margin-bottom: 0.6rem;">
+            <span class="category-tag" style="${catStyle}">${c.icon} ${c.name}</span>
+            ${isSystem ? `
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Default</span>
+            ` : `
+               <button class="btn-timer-ctrl" onclick="Components.deleteCategory(${c.id})" style="border-color: rgba(235, 87, 87, 0.2); color: var(--priority-urgent);">Delete</button>
+            `}
+          </div>
+        `;
+      });
+
+      container.innerHTML = `
+        <div class="settings-grid">
+          
+          <div class="glass-panel">
+            <div class="settings-section-title">Category Settings</div>
+            <p class="settings-description">Custom categories allow tag sorting and project visual grouping.</p>
+            
+            <div style="margin-bottom: 2rem; max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+               ${categoryListHtml}
+            </div>
+
+            <form id="create-category-form" onsubmit="Components.createCategory(event)" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+               <div style="font-weight: 600; font-size: 0.9rem; color: #fff;">Create Custom Category</div>
+               <div class="form-group">
+                 <label for="cat-name">Category Name</label>
+                 <input type="text" id="cat-name" class="form-control" placeholder="e.g. Documentation" required>
+               </div>
+               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                 <div class="form-group">
+                   <label for="cat-color">Color (HSL)</label>
+                   <select id="cat-color" class="form-control">
+                     <option value="hsl(280, 80%, 65%)">Purple</option>
+                     <option value="hsl(200, 80%, 65%)">Cyan</option>
+                     <option value="hsl(340, 80%, 65%)">Pink</option>
+                     <option value="hsl(120, 80%, 65%)">Green</option>
+                     <option value="hsl(45, 90%, 60%)">Yellow</option>
+                     <option value="hsl(15, 85%, 60%)">Orange</option>
+                     <option value="hsl(0, 80%, 60%)">Red</option>
+                   </select>
+                 </div>
+                 <div class="form-group">
+                   <label for="cat-icon">Icon (Emoji)</label>
+                   <select id="cat-icon" class="form-control">
+                     <option value="🎨">🎨 Art / Design</option>
+                     <option value="💻">💻 Code / Dev</option>
+                     <option value="📈">📈 Charts / Marketing</option>
+                     <option value="⚙️">⚙️ General</option>
+                     <option value="🧪">🧪 Testing</option>
+                     <option value="📝">📝 Writing</option>
+                     <option value="🚀">🚀 Release</option>
+                     <option value="💬">💬 Chat</option>
+                   </select>
+                 </div>
+               </div>
+               <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Create Category</button>
+            </form>
+          </div>
+
+          <div class="glass-panel">
+            <div class="settings-section-title">Workspace Data Portability</div>
+            <p class="settings-description">Export your complete database, tasks, comment feeds, and activity timelines to a backup JSON file, or restore from a previously exported backup.</p>
+
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+               <div>
+                 <div style="font-weight: 600; font-size: 0.9rem; color: #fff; margin-bottom: 0.5rem;">Export Data Backup</div>
+                 <button type="button" class="btn btn-secondary" onclick="Components.exportWorkspaceData()" style="width: 100%; justify-content: center; gap: 0.5rem;">
+                   📥 Download Workspace Backup JSON
+                 </button>
+               </div>
+
+               <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1.5rem;">
+                 <div style="font-weight: 600; font-size: 0.9rem; color: #fff; margin-bottom: 0.5rem;">Restore Workspace Backup</div>
+                 <div class="import-upload-area" onclick="document.getElementById('import-file-selector').click()">
+                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                   <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Click to choose file or drag backup JSON here</div>
+                   <input type="file" id="import-file-selector" class="hidden" accept=".json" onchange="Components.importWorkspaceData(event)">
+                 </div>
+               </div>
+            </div>
+          </div>
+
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div class="error-msg">Error loading settings: ${err.message}</div>`;
+    }
+  },
+
+  async deleteCategory(id) {
+    try {
+      await API.deleteCategory(id);
+      Utils.showToast('Category deleted successfully');
+      this.renderSettings('view-settings');
+    } catch (err) {
+      Utils.showToast(`Failed to delete category: ${err.message}`, 'error');
+    }
+  },
+
+  async createCategory(event) {
+    event.preventDefault();
+    const name = document.getElementById('cat-name').value.trim();
+    const color = document.getElementById('cat-color').value;
+    const icon = document.getElementById('cat-icon').value;
+
+    try {
+      await API.createCategory({ name, color, icon });
+      Utils.showToast('Category created successfully');
+      document.getElementById('cat-name').value = '';
+      this.renderSettings('view-settings');
+    } catch (err) {
+      Utils.showToast(`Failed to create category: ${err.message}`, 'error');
+    }
+  },
+
+  async exportWorkspaceData() {
+    try {
+      const data = await API.exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `zenith_workspace_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      Utils.showToast('Backup JSON downloaded successfully');
+    } catch (err) {
+      Utils.showToast(`Export failed: ${err.message}`, 'error');
+    }
+  },
+
+  async importWorkspaceData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        if (!confirm('WARNING: Importing this backup will overwrite ALL current database tasks, comments, categories, and timelines. Do you want to proceed?')) {
+          event.target.value = '';
+          return;
+        }
+
+        const res = await API.importData(parsed);
+        Utils.showToast(res.message);
+        
+        await this.initialize();
+        
+        const dashBtn = document.querySelector('[data-view="dashboard"]');
+        if (dashBtn) dashBtn.click();
+      } catch (err) {
+        Utils.showToast(`Import failed: Invalid backup file - ${err.message}`, 'error');
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.readAsText(file);
   }
 };

@@ -505,6 +505,24 @@ app.post('/api/tasks/:id/comments', async (req, res) => {
   }
 });
 
+// GET Global Activity Logs
+app.get('/api/activity-logs', async (req, res) => {
+  try {
+    const logs = await all(`
+      SELECT al.*, u.name AS user_name, t.title AS task_title
+      FROM activity_logs al
+      LEFT JOIN users u ON al.user_id = u.id
+      LEFT JOIN tasks t ON al.task_id = t.id
+      ORDER BY al.created_at DESC
+      LIMIT 100
+    `);
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching global logs:', error);
+    res.status(500).json({ error: 'Failed to retrieve activity logs' });
+  }
+});
+
 // ==========================================
 // 6. System Data Import & Export (Settings helper)
 // ==========================================

@@ -100,6 +100,11 @@ const API = {
     return this.request('GET', '/dashboard/stats');
   },
 
+  // Activity Logs
+  getActivityLogs() {
+    return this.request('GET', '/activity-logs');
+  },
+
   // System Export/Import
   exportData() {
     return this.request('GET', '/system/export');

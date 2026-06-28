@@ -114,31 +114,11 @@ function renderCalendarView() {
 }
 
 function renderLogsView() {
-  const panel = document.getElementById('view-logs');
-  if (!panel) return;
-  panel.innerHTML = `
-    <div class="glass-panel">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Audit Logs</h2>
-      <p class="text-secondary" style="margin-bottom: 1.5rem;">Audit logging streams for workspace changes will render here (Module 6).</p>
-      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
-        Workspace audit trail feed loading...
-      </div>
-    </div>
-  `;
+  Components.renderLogs('view-logs');
 }
 
 function renderSettingsView() {
-  const panel = document.getElementById('view-settings');
-  if (!panel) return;
-  panel.innerHTML = `
-    <div class="glass-panel">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Workspace Settings</h2>
-      <p class="text-secondary" style="margin-bottom: 1.5rem;">Configure custom categories and export/import workspace data (Module 6).</p>
-      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
-        System settings controls loading...
-      </div>
-    </div>
-  `;
+  Components.renderSettings('view-settings');
 }
 
 // ==========================================

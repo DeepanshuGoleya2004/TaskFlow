@@ -8,11 +8,18 @@ const API = {
   // Helper for requests
   async request(method, path, body = null) {
     const url = `${API_BASE_URL}${path}`;
+    const token = localStorage.getItem('token');
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const options = {
       method: method,
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: headers
     };
 
     if (body) {
@@ -112,5 +119,26 @@ const API = {
 
   importData(data) {
     return this.request('POST', '/system/import', data);
+  },
+
+  // Authentication
+  register(userData) {
+    return this.request('POST', '/auth/register', userData);
+  },
+
+  login(credentials) {
+    return this.request('POST', '/auth/login', credentials);
+  },
+
+  guestLogin() {
+    return this.request('POST', '/auth/guest-login');
+  },
+
+  getProfile() {
+    return this.request('GET', '/auth/profile');
+  },
+
+  logout() {
+    return this.request('POST', '/auth/logout');
   }
 };

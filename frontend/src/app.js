@@ -396,3 +396,16 @@ function setupTimerControls() {
     display.classList.remove('timer-running');
   };
 }
+
+// Invoked from Components.js when user clicks "Load Focus Timer"
+window.loadTimerTask = (taskId, taskTitle) => {
+  window.currentTimerTaskId = taskId;
+  
+  const label = document.getElementById('global-timer-task-name');
+  const toggleBtn = document.getElementById('global-timer-toggle');
+  const resetBtn = document.getElementById('global-timer-reset');
+
+  if (label) label.textContent = taskTitle;
+  if (toggleBtn) toggleBtn.disabled = false;
+  if (resetBtn) resetBtn.disabled = false;
+};

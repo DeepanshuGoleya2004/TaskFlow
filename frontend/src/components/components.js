@@ -212,7 +212,7 @@ const Components = {
           const dueDateText = task.due_date ? Utils.formatDate(task.due_date) : '';
           
           html += `
-            <div class="task-card" draggable="true" ondragstart="Components.onDragStart(event, ${task.id})" onclick="Components.showTaskDetails(${task.id})">
+            <div class="task-card" draggable="true" ondragstart="Components.onDragStart(event, '${task.id}')" onclick="Components.showTaskDetails('${task.id}')">
               <div class="card-tags">
                 ${task.category_name ? `<span class="category-tag" style="${catStyle}">${task.category_icon} ${task.category_name}</span>` : '<span></span>'}
                 <span class="priority-tag ${priorityClass}">${task.priority}</span>
@@ -426,7 +426,7 @@ const Components = {
         html += `
           <tr>
             <td>
-              <span class="list-task-title" onclick="Components.showTaskDetails(${t.id})">${t.title}</span>
+              <span class="list-task-title" onclick="Components.showTaskDetails('${t.id}')">${t.title}</span>
             </td>
             <td>
               <span class="status-badge ${statusClass}">${t.status}</span>
@@ -552,7 +552,7 @@ const Components = {
                 const bgHsl = borderHsl.replace(')', ', 0.15)').replace('hsl', 'hsla');
                 
                 return `
-                  <div class="calendar-task-item" style="background: ${bgHsl}; border-left: 3px solid ${borderHsl}; color: #fff;" onclick="Components.showTaskDetails(${t.id}); event.stopPropagation();">
+                  <div class="calendar-task-item" style="background: ${bgHsl}; border-left: 3px solid ${borderHsl}; color: #fff;" onclick="Components.showTaskDetails('${t.id}'); event.stopPropagation();">
                     ${t.title}
                   </div>
                 `;
@@ -631,7 +631,7 @@ const Components = {
             <div class="detail-layout">
               
               <!-- Left Side: Core Edit Form -->
-              <form id="task-detail-form" class="detail-main" onsubmit="Components.saveTaskDetails(event, ${task.id})">
+              <form id="task-detail-form" class="detail-main" onsubmit="Components.saveTaskDetails(event, '${task.id}')">
                 <div class="form-group">
                   <label for="detail-title">Task Title</label>
                   <input type="text" id="detail-title" class="form-control" value="${task.title}" required>
@@ -691,7 +691,7 @@ const Components = {
 
                 <div style="display: flex; gap: 1rem; margin-top: 1rem;">
                   <button type="submit" class="btn btn-primary" style="flex-grow: 1;">Save Changes</button>
-                  <button type="button" class="btn btn-danger" onclick="Components.deleteTask(${task.id})">Delete Task</button>
+                  <button type="button" class="btn btn-danger" onclick="Components.deleteTask('${task.id}')">Delete Task</button>
                 </div>
               </form>
 
@@ -710,7 +710,7 @@ const Components = {
                     <div style="width: ${progressPercent}%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--primary)); border-radius: 4px;"></div>
                   </div>
 
-                  <button class="btn btn-secondary" style="width: 100%; display: flex; justify-content: center; gap: 0.5rem;" onclick="Components.loadTaskToTimer(${task.id}, '${task.title.replace(/'/g, "\\'")}')">
+                  <button class="btn btn-secondary" style="width: 100%; display: flex; justify-content: center; gap: 0.5rem;" onclick="Components.loadTaskToTimer('${task.id}', '${task.title.replace(/'/g, "\\'")}')">
                     ⏱️ Load Focus Timer
                   </button>
                 </div>
@@ -727,7 +727,7 @@ const Components = {
                       ${this.users.map(u => `<option value="${u.id}">${u.avatar}</option>`).join('')}
                     </select>
                     <input type="text" id="comment-text-input" class="form-control" placeholder="Add a comment..." style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
-                    <button class="btn btn-primary" style="padding: 0.4rem 1rem; font-size: 0.85rem;" onclick="Components.postComment(${task.id})">Post</button>
+                    <button class="btn btn-primary" style="padding: 0.4rem 1rem; font-size: 0.85rem;" onclick="Components.postComment('${task.id}')">Post</button>
                   </div>
                 </div>
 
@@ -810,8 +810,8 @@ const Components = {
       description,
       status,
       priority,
-      category_id: category_id ? parseInt(category_id) : null,
-      assignee_id: assignee_id ? parseInt(assignee_id) : null,
+      category_id: category_id || null,
+      assignee_id: assignee_id || null,
       due_date: due_date || null,
       estimated_minutes: estimated_minutes ? parseInt(estimated_minutes) : 0
     };
@@ -964,12 +964,25 @@ const Components = {
       description,
       status,
       priority,
-      category_id: category_id ? parseInt(category_id) : null,
-      assignee_id: assignee_id ? parseInt(assignee_id) : null,
+      category_id: category_id || null,
+      assignee_id: assignee_id || null,
       due_date: due_date || null,
       estimated_minutes: estimated_minutes ? parseInt(estimated_minutes) : 0
     };
 
+    try {
+      await API.createTask(payload);
+      Utils.showToast('Task created successfully');
+      closeModal();
+
+      // Refresh active panel
+      if (window.currentView === 'dashboard') this.renderDashboard('view-dashboard');
+      if (window.currentView === 'kanban') this.renderKanban('view-kanban');
+      if (window.currentView === 'list') this.renderList('view-list');
+      if (window.currentView === 'calendar') this.renderCalendar('view-calendar');
+    } catch (err) {
+      Utils.showToast(`Failed to create task: ${err.message}`, 'error');
+    }
   },
 
   // ==========================================
@@ -1044,7 +1057,7 @@ const Components = {
 
       let categoryListHtml = '';
       this.categories.forEach(c => {
-        const isSystem = c.id <= 4;
+        const isSystem = ['Design', 'Engineering', 'Marketing', 'General'].includes(c.name);
         const catStyle = Utils.getCategoryStyle(c.color);
         
         categoryListHtml += `
@@ -1053,7 +1066,7 @@ const Components = {
             ${isSystem ? `
               <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Default</span>
             ` : `
-               <button class="btn-timer-ctrl" onclick="Components.deleteCategory(${c.id})" style="border-color: rgba(235, 87, 87, 0.2); color: var(--priority-urgent);">Delete</button>
+               <button class="btn-timer-ctrl" onclick="Components.deleteCategory('${c.id}')" style="border-color: rgba(235, 87, 87, 0.2); color: var(--priority-urgent);">Delete</button>
             `}
           </div>
         `;

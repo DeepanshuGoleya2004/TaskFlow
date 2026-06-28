@@ -11,6 +11,20 @@ let isTimerRunning = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Zenith App booting...');
+
+  // Load initial theme settings
+  const currentTheme = localStorage.getItem('theme');
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+  if (currentTheme === 'light') {
+    document.documentElement.classList.add('light-theme');
+    if (sunIcon) sunIcon.classList.remove('hidden');
+    if (moonIcon) moonIcon.classList.add('hidden');
+  } else {
+    document.documentElement.classList.remove('light-theme');
+    if (sunIcon) sunIcon.classList.add('hidden');
+    if (moonIcon) moonIcon.classList.remove('hidden');
+  }
   
   // Setup Auth hooks and actions globally for UI elements
   window.app = {
@@ -134,6 +148,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       localStorage.removeItem('token');
       window.currentUser = null;
       window.location.hash = '#/signup';
+    },
+
+    toggleTheme() {
+      const isLight = document.documentElement.classList.contains('light-theme');
+      const sunIcon = document.getElementById('theme-icon-sun');
+      const moonIcon = document.getElementById('theme-icon-moon');
+
+      if (isLight) {
+        document.documentElement.classList.remove('light-theme');
+        localStorage.setItem('theme', 'dark');
+        if (sunIcon) sunIcon.classList.add('hidden');
+        if (moonIcon) moonIcon.classList.remove('hidden');
+      } else {
+        document.documentElement.classList.add('light-theme');
+        localStorage.setItem('theme', 'light');
+        if (sunIcon) sunIcon.classList.remove('hidden');
+        if (moonIcon) moonIcon.classList.add('hidden');
+      }
+
+      // Re-draw components and charts immediately on theme changes
+      if (window.currentView === 'dashboard' && window.Components) {
+        window.Components.renderDashboard('view-dashboard');
+      }
     }
   };
 

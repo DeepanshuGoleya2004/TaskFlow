@@ -25,7 +25,7 @@ async function authenticate(req, res, next) {
 
     // Attach user profile payload to request context
     req.user = {
-      id: user._id,
+      id: user._id.toString(),
       fullName: user.fullName,
       email: user.email,
       role: user.role,

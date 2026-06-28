@@ -4,7 +4,17 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
-const { initDatabase, run, get, all } = require('./database');
+const mongoose = require('mongoose');
+
+const { initDatabase } = require('./database');
+const { authenticate, authorize } = require('./middleware/auth');
+
+// Mongoose Models
+const User = require('./models/User');
+const Category = require('./models/Category');
+const Task = require('./models/Task');
+const Comment = require('./models/Comment');
+const ActivityLog = require('./models/ActivityLog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,40 +42,47 @@ app.get('/api/health', (req, res) => {
 // ==========================================
 // 1. Dashboard Statistics
 // ==========================================
-app.get('/api/dashboard/stats', async (req, res) => {
+app.get('/api/dashboard/stats', authenticate, async (req, res) => {
   try {
+    const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
-    // Get basic task counts
-    const totalRow = await get('SELECT COUNT(*) AS count FROM tasks');
-    const completedRow = await get("SELECT COUNT(*) AS count FROM tasks WHERE status = 'Completed'");
-    const inProgressRow = await get("SELECT COUNT(*) AS count FROM tasks WHERE status = 'In Progress'");
-    const overdueRow = await get(
-      "SELECT COUNT(*) AS count FROM tasks WHERE status != 'Completed' AND due_date IS NOT NULL AND due_date < ?",
-      [today]
-    );
+    // Scoped metrics queries
+    const total = await Task.countDocuments({ user_id: userId });
+    const completed = await Task.countDocuments({ user_id: userId, status: 'Completed' });
+    const inProgress = await Task.countDocuments({ user_id: userId, status: 'In Progress' });
+    const overdue = await Task.countDocuments({
+      user_id: userId,
+      status: { $ne: 'Completed' },
+      due_date: { $lt: today, $ne: null }
+    });
 
-    const total = totalRow.count;
-    const completed = completedRow.count;
-    const inProgress = inProgressRow.count;
-    const overdue = overdueRow.count;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    // Category tasks count distribution
-    const categoryDistribution = await all(`
-      SELECT c.name AS category_name, c.color AS category_color, c.icon AS category_icon, COUNT(t.id) AS count
-      FROM categories c
-      LEFT JOIN tasks t ON t.category_id = c.id
-      GROUP BY c.id
-    `);
+    // Categories list to build counts
+    const categories = await Category.find().sort({ name: 1 });
+    
+    const categoryDistribution = [];
+    const timeSpentByCategory = [];
 
-    // Actual hours logged per category
-    const timeSpentByCategory = await all(`
-      SELECT c.name AS category_name, c.color AS category_color, SUM(t.actual_minutes) AS total_actual_minutes
-      FROM categories c
-      LEFT JOIN tasks t ON t.category_id = c.id
-      GROUP BY c.id
-    `);
+    for (const cat of categories) {
+      const taskCount = await Task.countDocuments({ user_id: userId, category_id: cat._id });
+      categoryDistribution.push({
+        category_name: cat.name,
+        category_color: cat.color,
+        category_icon: cat.icon,
+        count: taskCount
+      });
+
+      const catTasks = await Task.find({ user_id: userId, category_id: cat._id });
+      const totalMinutes = catTasks.reduce((sum, t) => sum + (t.actual_minutes || 0), 0);
+      
+      timeSpentByCategory.push({
+        category_name: cat.name,
+        category_color: cat.color,
+        total_actual_minutes: totalMinutes > 0 ? totalMinutes : null
+      });
+    }
 
     res.json({
       total_tasks: total,
@@ -86,47 +103,59 @@ app.get('/api/dashboard/stats', async (req, res) => {
 // 2. Tasks CRUD Endpoints
 // ==========================================
 
-// GET List of Tasks
-app.get('/api/tasks', async (req, res) => {
+// GET List of Tasks (Scoped by RBAC)
+app.get('/api/tasks', authenticate, async (req, res) => {
   try {
     const { status, priority, category_id, assignee_id, search } = req.query;
 
-    let query = `
-      SELECT t.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
-             u.name AS assignee_name, u.avatar AS assignee_avatar, u.role AS assignee_role
-      FROM tasks t
-      LEFT JOIN categories c ON t.category_id = c.id
-      LEFT JOIN users u ON t.assignee_id = u.id
-      WHERE 1=1
-    `;
-    const params = [];
+    // Filters build
+    const filter = {};
+    
+    // RBAC check: Members and Guests only access their own tasks; Admins access everything
+    if (req.user.role !== 'Admin') {
+      filter.user_id = req.user.id;
+    }
 
-    if (status) {
-      query += ` AND t.status = ?`;
-      params.push(status);
-    }
-    if (priority) {
-      query += ` AND t.priority = ?`;
-      params.push(priority);
-    }
-    if (category_id) {
-      query += ` AND t.category_id = ?`;
-      params.push(category_id);
-    }
-    if (assignee_id) {
-      query += ` AND t.assignee_id = ?`;
-      params.push(assignee_id);
-    }
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+    if (category_id) filter.category_id = category_id;
+    if (assignee_id) filter.assignee_id = assignee_id;
+    
     if (search) {
-      query += ` AND (t.title LIKE ? OR t.description LIKE ?)`;
-      const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam);
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
 
-    query += ` ORDER BY t.due_date ASC, t.id DESC`;
+    const tasks = await Task.find(filter)
+      .populate('category_id')
+      .populate('assignee_id')
+      .sort({ due_date: 1, createdAt: -1 });
 
-    const tasks = await all(query, params);
-    res.json(tasks);
+    // Map to flat compatibility structure
+    const mappedTasks = tasks.map(t => ({
+      id: t._id,
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      priority: t.priority,
+      category_id: t.category_id ? t.category_id._id : null,
+      category_name: t.category_id ? t.category_id.name : null,
+      category_color: t.category_id ? t.category_id.color : null,
+      category_icon: t.category_id ? t.category_id.icon : null,
+      assignee_id: t.assignee_id ? t.assignee_id._id : null,
+      assignee_name: t.assignee_id ? t.assignee_id.fullName : null,
+      assignee_avatar: t.assignee_id ? t.assignee_id.avatar : null,
+      assignee_role: t.assignee_id ? t.assignee_id.role : null,
+      due_date: t.due_date,
+      estimated_minutes: t.estimated_minutes,
+      actual_minutes: t.actual_minutes,
+      created_at: t.createdAt,
+      updated_at: t.updatedAt
+    }));
+
+    res.json(mappedTasks);
   } catch (error) {
     console.error('Error fetching tasks:', error);
     res.status(500).json({ error: 'Failed to retrieve tasks' });
@@ -134,46 +163,70 @@ app.get('/api/tasks', async (req, res) => {
 });
 
 // GET Single Task Details
-app.get('/api/tasks/:id', async (req, res) => {
+app.get('/api/tasks/:id', authenticate, async (req, res) => {
   try {
-    const task = await get(
-      `SELECT t.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
-              u.name AS assignee_name, u.avatar AS assignee_avatar, u.role AS assignee_role
-       FROM tasks t
-       LEFT JOIN categories c ON t.category_id = c.id
-       LEFT JOIN users u ON t.assignee_id = u.id
-       WHERE t.id = ?`,
-      [req.params.id]
-    );
+    const task = await Task.findById(req.params.id)
+      .populate('category_id')
+      .populate('assignee_id');
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
+    // Auth Scope validation (unless Admin)
+    if (req.user.role !== 'Admin' && task.user_id.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
     // Retrieve Comments
-    const comments = await all(
-      `SELECT com.*, u.name AS user_name, u.avatar AS user_avatar, u.role AS user_role
-       FROM comments com
-       JOIN users u ON com.user_id = u.id
-       WHERE com.task_id = ?
-       ORDER BY com.created_at DESC`,
-      [req.params.id]
-    );
+    const comments = await Comment.find({ task_id: task._id })
+      .populate('user_id')
+      .sort({ createdAt: -1 });
 
     // Retrieve Activity Logs
-    const activity_logs = await all(
-      `SELECT al.*, u.name AS user_name
-       FROM activity_logs al
-       LEFT JOIN users u ON al.user_id = u.id
-       WHERE al.task_id = ?
-       ORDER BY al.created_at DESC`,
-      [req.params.id]
-    );
+    const activity_logs = await ActivityLog.find({ task_id: task._id })
+      .populate('user_id')
+      .sort({ createdAt: -1 });
+
+    const mappedComments = comments.map(c => ({
+      id: c._id,
+      content: c.content,
+      user_id: c.user_id ? c.user_id._id : null,
+      user_name: c.user_id ? c.user_id.fullName : 'Unknown User',
+      user_avatar: c.user_id ? c.user_id.avatar : '?',
+      user_role: c.user_id ? c.user_id.role : 'Member',
+      created_at: c.createdAt
+    }));
+
+    const mappedLogs = activity_logs.map(l => ({
+      id: l._id,
+      action: l.action,
+      details: l.details,
+      user_name: l.user_id ? l.user_id.fullName : 'System',
+      created_at: l.createdAt
+    }));
 
     res.json({
-      ...task,
-      comments,
-      activity_logs
+      id: task._id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      category_id: task.category_id ? task.category_id._id : null,
+      category_name: task.category_id ? task.category_id.name : null,
+      category_color: task.category_id ? task.category_id.color : null,
+      category_icon: task.category_id ? task.category_id.icon : null,
+      assignee_id: task.assignee_id ? task.assignee_id._id : null,
+      assignee_name: task.assignee_id ? task.assignee_id.fullName : null,
+      assignee_avatar: task.assignee_id ? task.assignee_id.avatar : null,
+      assignee_role: task.assignee_id ? task.assignee_id.role : null,
+      due_date: task.due_date,
+      estimated_minutes: task.estimated_minutes,
+      actual_minutes: task.actual_minutes,
+      created_at: task.createdAt,
+      updated_at: task.updatedAt,
+      comments: mappedComments,
+      activity_logs: mappedLogs
     });
   } catch (error) {
     console.error('Error fetching task details:', error);
@@ -182,7 +235,7 @@ app.get('/api/tasks/:id', async (req, res) => {
 });
 
 // POST Create Task
-app.post('/api/tasks', async (req, res) => {
+app.post('/api/tasks', authenticate, async (req, res) => {
   try {
     const { title, description, status, priority, category_id, assignee_id, due_date, estimated_minutes } = req.body;
 
@@ -190,31 +243,34 @@ app.post('/api/tasks', async (req, res) => {
       return res.status(400).json({ error: 'Task title is required' });
     }
 
-    const taskStatus = status || 'Todo';
-    const taskPriority = priority || 'Medium';
-    const estMin = estimated_minutes || 0;
-
-    const result = await run(
-      `INSERT INTO tasks (title, description, status, priority, category_id, assignee_id, due_date, estimated_minutes, actual_minutes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-      [title, description, taskStatus, taskPriority, category_id || null, assignee_id || null, due_date || null, estMin]
-    );
+    const task = await Task.create({
+      title,
+      description,
+      status: status || 'Todo',
+      priority: priority || 'Medium',
+      category_id: category_id || null,
+      assignee_id: assignee_id || null,
+      user_id: req.user.id, // Set active user as owner
+      due_date: due_date || null,
+      estimated_minutes: estimated_minutes || 0,
+      actual_minutes: 0
+    });
 
     // Create Audit Log
-    // If assignee is specified, grab their name
     let assigneeName = '';
     if (assignee_id) {
-      const u = await get('SELECT name FROM users WHERE id = ?', [assignee_id]);
-      if (u) assigneeName = u.name;
+      const u = await User.findById(assignee_id);
+      if (u) assigneeName = u.fullName;
     }
 
-    await run(
-      `INSERT INTO activity_logs (task_id, user_id, action, details)
-       VALUES (?, ?, 'created', ?)`,
-      [result.id, assignee_id || null, assigneeName ? `Task created and assigned to ${assigneeName}` : 'Task created']
-    );
+    await ActivityLog.create({
+      task_id: task._id,
+      user_id: req.user.id,
+      action: 'created',
+      details: assigneeName ? `Task created and assigned to ${assigneeName}` : 'Task created'
+    });
 
-    res.status(201).json({ id: result.id, message: 'Task created successfully' });
+    res.status(201).json({ id: task._id, message: 'Task created successfully' });
   } catch (error) {
     console.error('Error creating task:', error);
     res.status(500).json({ error: 'Failed to create task' });
@@ -222,97 +278,97 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 // PUT Update Task with Detailed Audit Logging
-app.put('/api/tasks/:id', async (req, res) => {
+app.put('/api/tasks/:id', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id;
     const { title, description, status, priority, category_id, assignee_id, due_date, estimated_minutes, actual_minutes } = req.body;
 
-    // Get current state to compare changes
-    const current = await get('SELECT * FROM tasks WHERE id = ?', [taskId]);
-    if (!current) {
+    // Get current task state to verify ownership and changes
+    const task = await Task.findById(taskId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const updates = [];
-    const params = [];
+    if (req.user.role !== 'Admin' && task.user_id.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
     const auditLogs = [];
 
-    // Fields tracking
-    if (title !== undefined && title !== current.title) {
-      updates.push('title = ?');
-      params.push(title);
+    // Fields comparison
+    if (title !== undefined && title !== task.title) {
       auditLogs.push({ action: 'updated', details: `Renamed task to "${title}"` });
+      task.title = title;
     }
-    if (description !== undefined && description !== current.description) {
-      updates.push('description = ?');
-      params.push(description);
+    if (description !== undefined && description !== task.description) {
       auditLogs.push({ action: 'updated', details: 'Updated description' });
+      task.description = description;
     }
-    if (status !== undefined && status !== current.status) {
-      updates.push('status = ?');
-      params.push(status);
-      auditLogs.push({ action: 'status_changed', details: `Moved status from "${current.status}" to "${status}"` });
+    if (status !== undefined && status !== task.status) {
+      auditLogs.push({ action: 'status_changed', details: `Moved status from "${task.status}" to "${status}"` });
+      task.status = status;
     }
-    if (priority !== undefined && priority !== current.priority) {
-      updates.push('priority = ?');
-      params.push(priority);
-      auditLogs.push({ action: 'updated', details: `Changed priority from "${current.priority}" to "${priority}"` });
+    if (priority !== undefined && priority !== task.priority) {
+      auditLogs.push({ action: 'updated', details: `Changed priority from "${task.priority}" to "${priority}"` });
+      task.priority = priority;
     }
-    if (category_id !== undefined && category_id !== current.category_id) {
-      updates.push('category_id = ?');
-      params.push(category_id || null);
-      if (category_id) {
-        const cat = await get('SELECT name FROM categories WHERE id = ?', [category_id]);
-        auditLogs.push({ action: 'updated', details: `Category set to "${cat ? cat.name : 'Unknown'}"` });
-      } else {
-        auditLogs.push({ action: 'updated', details: 'Removed category' });
+    
+    // Category check
+    if (category_id !== undefined) {
+      const oldCatId = task.category_id ? task.category_id.toString() : null;
+      const newCatId = category_id ? category_id.toString() : null;
+      if (oldCatId !== newCatId) {
+        task.category_id = category_id || null;
+        if (category_id) {
+          const cat = await Category.findById(category_id);
+          auditLogs.push({ action: 'updated', details: `Category set to "${cat ? cat.name : 'Unknown'}"` });
+        } else {
+          auditLogs.push({ action: 'updated', details: 'Removed category' });
+        }
       }
     }
-    if (assignee_id !== undefined && assignee_id !== current.assignee_id) {
-      updates.push('assignee_id = ?');
-      params.push(assignee_id || null);
-      if (assignee_id) {
-        const usr = await get('SELECT name FROM users WHERE id = ?', [assignee_id]);
-        auditLogs.push({ action: 'assigned', details: `Assigned task to ${usr ? usr.name : 'Unknown'}` });
-      } else {
-        auditLogs.push({ action: 'assigned', details: 'Unassigned task' });
+
+    // Assignee check
+    if (assignee_id !== undefined) {
+      const oldAssigneeId = task.assignee_id ? task.assignee_id.toString() : null;
+      const newAssigneeId = assignee_id ? assignee_id.toString() : null;
+      if (oldAssigneeId !== newAssigneeId) {
+        task.assignee_id = assignee_id || null;
+        if (assignee_id) {
+          const usr = await User.findById(assignee_id);
+          auditLogs.push({ action: 'assigned', details: `Assigned task to ${usr ? usr.fullName : 'Unknown'}` });
+        } else {
+          auditLogs.push({ action: 'assigned', details: 'Unassigned task' });
+        }
       }
     }
-    if (due_date !== undefined && due_date !== current.due_date) {
-      updates.push('due_date = ?');
-      params.push(due_date || null);
+
+    if (due_date !== undefined && due_date !== task.due_date) {
       auditLogs.push({ action: 'updated', details: due_date ? `Changed due date to ${due_date}` : 'Removed due date' });
+      task.due_date = due_date || null;
     }
-    if (estimated_minutes !== undefined && estimated_minutes !== current.estimated_minutes) {
-      updates.push('estimated_minutes = ?');
-      params.push(estimated_minutes);
+    if (estimated_minutes !== undefined && estimated_minutes !== task.estimated_minutes) {
       auditLogs.push({ action: 'updated', details: `Estimated time changed to ${estimated_minutes} min` });
+      task.estimated_minutes = estimated_minutes;
     }
-    if (actual_minutes !== undefined && actual_minutes !== current.actual_minutes) {
-      updates.push('actual_minutes = ?');
-      params.push(actual_minutes);
-      const delta = actual_minutes - current.actual_minutes;
+    if (actual_minutes !== undefined && actual_minutes !== task.actual_minutes) {
+      const delta = actual_minutes - task.actual_minutes;
       auditLogs.push({ action: 'time_logged', details: `Logged ${delta} minutes of focus time` });
+      task.actual_minutes = actual_minutes;
     }
 
-    if (updates.length === 0) {
-      return res.json({ message: 'No changes detected' });
-    }
-
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    params.push(taskId);
-
-    const updateSql = `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`;
-    await run(updateSql, params);
-
-    // Write all audit logs
-    const actorId = assignee_id || current.assignee_id || null;
-    for (const log of auditLogs) {
-      await run(
-        `INSERT INTO activity_logs (task_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [taskId, actorId, log.action, log.details]
-      );
+    if (auditLogs.length > 0) {
+      await task.save();
+      
+      // Write audit trail
+      for (const log of auditLogs) {
+        await ActivityLog.create({
+          task_id: taskId,
+          user_id: req.user.id,
+          action: log.action,
+          details: log.details
+        });
+      }
     }
 
     res.json({ message: 'Task updated successfully' });
@@ -323,19 +379,23 @@ app.put('/api/tasks/:id', async (req, res) => {
 });
 
 // DELETE Task
-app.delete('/api/tasks/:id', async (req, res) => {
+app.delete('/api/tasks/:id', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id;
-    // Check if exists
-    const current = await get('SELECT id FROM tasks WHERE id = ?', [taskId]);
-    if (!current) {
+    const task = await Task.findById(taskId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Delete comments and activity logs associated (handled by Cascade or manual cleanup)
-    await run('DELETE FROM comments WHERE task_id = ?', [taskId]);
-    await run('DELETE FROM activity_logs WHERE task_id = ?', [taskId]);
-    await run('DELETE FROM tasks WHERE id = ?', [taskId]);
+    // Scoped protection
+    if (req.user.role !== 'Admin' && task.user_id.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Cascade deletes
+    await Comment.deleteMany({ task_id: taskId });
+    await ActivityLog.deleteMany({ task_id: taskId });
+    await task.deleteOne();
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
@@ -345,31 +405,37 @@ app.delete('/api/tasks/:id', async (req, res) => {
 });
 
 // LOG TIME to Task
-app.post('/api/tasks/:id/log-time', async (req, res) => {
+app.post('/api/tasks/:id/log-time', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id;
-    const { minutes, user_id } = req.body;
+    const { minutes } = req.body;
 
     if (!minutes || isNaN(minutes) || minutes <= 0) {
       return res.status(400).json({ error: 'Valid minutes parameter is required' });
     }
 
-    const task = await get('SELECT actual_minutes FROM tasks WHERE id = ?', [taskId]);
+    const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const newTotal = task.actual_minutes + parseInt(minutes);
-    await run('UPDATE tasks SET actual_minutes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newTotal, taskId]);
+    // Scope check
+    if (req.user.role !== 'Admin' && task.user_id.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    task.actual_minutes += parseInt(minutes);
+    await task.save();
 
     // Insert Activity Log
-    await run(
-      `INSERT INTO activity_logs (task_id, user_id, action, details)
-       VALUES (?, ?, 'time_logged', ?)`,
-      [taskId, user_id || null, `Focused on task for ${minutes} minutes`]
-    );
+    await ActivityLog.create({
+      task_id: taskId,
+      user_id: req.user.id,
+      action: 'time_logged',
+      details: `Focused on task for ${minutes} minutes`
+    });
 
-    res.json({ message: 'Time logged successfully', actual_minutes: newTotal });
+    res.json({ message: 'Time logged successfully', actual_minutes: task.actual_minutes });
   } catch (error) {
     console.error('Error logging task time:', error);
     res.status(500).json({ error: 'Failed to log focus time' });
@@ -377,11 +443,11 @@ app.post('/api/tasks/:id/log-time', async (req, res) => {
 });
 
 // ==========================================
-// 3. Categories Endpoints
+// 3. Categories Endpoints (Admin / Member access only)
 // ==========================================
 app.get('/api/categories', async (req, res) => {
   try {
-    const categories = await all('SELECT * FROM categories ORDER BY name ASC');
+    const categories = await Category.find().sort({ name: 1 });
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -389,7 +455,7 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-app.post('/api/categories', async (req, res) => {
+app.post('/api/categories', authenticate, authorize(['Admin', 'Member']), async (req, res) => {
   try {
     const { name, color, icon } = req.body;
 
@@ -397,33 +463,34 @@ app.post('/api/categories', async (req, res) => {
       return res.status(400).json({ error: 'Name, color, and icon parameters are required' });
     }
 
-    const result = await run(
-      'INSERT INTO categories (name, color, icon) VALUES (?, ?, ?)',
-      [name, color, icon]
-    );
-
-    res.status(201).json({ id: result.id, message: 'Category created successfully' });
+    const category = await Category.create({ name, color, icon });
+    res.status(201).json({ id: category._id, message: 'Category created successfully' });
   } catch (error) {
     console.error('Error creating category:', error);
-    if (error.message.includes('UNIQUE')) {
+    if (error.message.includes('duplicate') || error.message.includes('E11000')) {
       return res.status(400).json({ error: 'Category name already exists' });
     }
     res.status(500).json({ error: 'Failed to create category' });
   }
 });
 
-app.delete('/api/categories/:id', async (req, res) => {
+app.delete('/api/categories/:id', authenticate, authorize(['Admin', 'Member']), async (req, res) => {
   try {
     const catId = req.params.id;
-    // Check if default seeded
-    if (parseInt(catId) <= 4) {
+
+    // Guard default seeded categories (we assume first 4 seeded IDs or by custom check)
+    // In Mongo we can verify by name
+    const cat = await Category.findById(catId);
+    if (!cat) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const defaults = ['Design', 'Engineering', 'Marketing', 'General'];
+    if (defaults.includes(cat.name)) {
       return res.status(400).json({ error: 'System default categories cannot be deleted' });
     }
 
-    const result = await run('DELETE FROM categories WHERE id = ?', [catId]);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
+    await cat.deleteOne();
     res.json({ message: 'Category deleted successfully' });
   } catch (error) {
     console.error('Error deleting category:', error);
@@ -432,11 +499,12 @@ app.delete('/api/categories/:id', async (req, res) => {
 });
 
 // ==========================================
-// 4. Users Endpoints
+// 4. Users Endpoints (Admin restricts write, read for assignment)
 // ==========================================
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', authenticate, async (req, res) => {
   try {
-    const users = await all('SELECT * FROM users ORDER BY name ASC');
+    // Return all registered members (excluding passwords)
+    const users = await User.find({}, '-password').sort({ fullName: 1 });
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -444,7 +512,7 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-app.post('/api/users', async (req, res) => {
+app.post('/api/users', authenticate, authorize(['Admin']), async (req, res) => {
   try {
     const { name, email, avatar, role } = req.body;
 
@@ -452,15 +520,22 @@ app.post('/api/users', async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and avatar parameters are required' });
     }
 
-    const result = await run(
-      'INSERT INTO users (name, email, avatar, role) VALUES (?, ?, ?, ?)',
-      [name, email, avatar, role || 'Member']
-    );
+    // Default password for manual admin creations
+    const hashedPassword = await bcrypt.hash('Taskpass123!', 10);
 
-    res.status(201).json({ id: result.id, message: 'User created successfully' });
+    const user = await User.create({
+      fullName: name,
+      email,
+      password: hashedPassword,
+      avatar,
+      role: role || 'Member',
+      isGuest: false
+    });
+
+    res.status(201).json({ id: user._id, message: 'User created successfully' });
   } catch (error) {
     console.error('Error creating user:', error);
-    if (error.message.includes('UNIQUE')) {
+    if (error.message.includes('duplicate') || error.message.includes('E11000')) {
       return res.status(400).json({ error: 'Email already registered' });
     }
     res.status(500).json({ error: 'Failed to create user' });
@@ -470,58 +545,81 @@ app.post('/api/users', async (req, res) => {
 // ==========================================
 // 5. Comments Endpoints
 // ==========================================
-app.post('/api/tasks/:id/comments', async (req, res) => {
+app.post('/api/tasks/:id/comments', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id;
-    const { user_id, content } = req.body;
+    const { content } = req.body;
 
-    if (!user_id || !content) {
-      return res.status(400).json({ error: 'User ID and comment content are required' });
+    if (!content) {
+      return res.status(400).json({ error: 'Comment content is required' });
     }
 
-    // Verify task exists
-    const task = await get('SELECT id FROM tasks WHERE id = ?', [taskId]);
+    const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Verify user exists
-    const user = await get('SELECT name FROM users WHERE id = ?', [user_id]);
-    if (!user) {
-      return res.status(400).json({ error: 'Valid user ID is required' });
+    // Scope check
+    if (req.user.role !== 'Admin' && task.user_id.toString() !== req.user.id) {
+      return res.status(404).json({ error: 'Task not found' });
     }
 
-    const result = await run(
-      'INSERT INTO comments (task_id, user_id, content) VALUES (?, ?, ?)',
-      [taskId, user_id, content]
-    );
+    const comment = await Comment.create({
+      task_id: taskId,
+      user_id: req.user.id, // Current logged-in user
+      content
+    });
 
     // Log Activity
-    await run(
-      `INSERT INTO activity_logs (task_id, user_id, action, details)
-       VALUES (?, ?, 'commented', ?)`,
-      [taskId, user_id, `Added a comment: "${content.substring(0, 30)}${content.length > 30 ? '...' : ''}"`]
-    );
+    await ActivityLog.create({
+      task_id: taskId,
+      user_id: req.user.id,
+      action: 'commented',
+      details: `Added a comment: "${content.substring(0, 30)}${content.length > 30 ? '...' : ''}"`
+    });
 
-    res.status(201).json({ id: result.id, message: 'Comment posted successfully' });
+    res.status(201).json({ id: comment._id, message: 'Comment posted successfully' });
   } catch (error) {
     console.error('Error posting comment:', error);
     res.status(500).json({ error: 'Failed to post comment' });
   }
 });
 
-// GET Global Activity Logs
-app.get('/api/activity-logs', async (req, res) => {
+// ==========================================
+// 6. Global Activity Logs
+// ==========================================
+app.get('/api/activity-logs', authenticate, async (req, res) => {
   try {
-    const logs = await all(`
-      SELECT al.*, u.name AS user_name, t.title AS task_title
-      FROM activity_logs al
-      LEFT JOIN users u ON al.user_id = u.id
-      LEFT JOIN tasks t ON al.task_id = t.id
-      ORDER BY al.created_at DESC
-      LIMIT 100
-    `);
-    res.json(logs);
+    const filter = {};
+    
+    // Non-admins only see logs related to their own tasks or actions
+    if (req.user.role !== 'Admin') {
+      const myTasks = await Task.find({ user_id: req.user.id }).select('_id');
+      const taskIds = myTasks.map(t => t._id);
+      
+      filter.$or = [
+        { user_id: req.user.id },
+        { task_id: { $in: taskIds } }
+      ];
+    }
+
+    const logs = await ActivityLog.find(filter)
+      .populate('user_id')
+      .populate('task_id')
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    const mappedLogs = logs.map(l => ({
+      id: l._id,
+      action: l.action,
+      details: l.details,
+      user_name: l.user_id ? l.user_id.fullName : 'System',
+      task_id: l.task_id ? l.task_id._id : null,
+      task_title: l.task_id ? l.task_id.title : null,
+      created_at: l.createdAt
+    }));
+
+    res.json(mappedLogs);
   } catch (error) {
     console.error('Error fetching global logs:', error);
     res.status(500).json({ error: 'Failed to retrieve activity logs' });
@@ -529,15 +627,23 @@ app.get('/api/activity-logs', async (req, res) => {
 });
 
 // ==========================================
-// 6. System Data Import & Export (Settings helper)
+// 7. System Data Import & Export (Members and Admins only, Guest blocked!)
 // ==========================================
-app.get('/api/system/export', async (req, res) => {
+app.get('/api/system/export', authenticate, authorize(['Admin', 'Member']), async (req, res) => {
   try {
-    const tasks = await all('SELECT * FROM tasks');
-    const categories = await all('SELECT * FROM categories');
-    const users = await all('SELECT * FROM users');
-    const comments = await all('SELECT * FROM comments');
-    const activity_logs = await all('SELECT * FROM activity_logs');
+    const userId = req.user.id;
+    
+    // Scoped export: Admin gets all, Member gets their own scoped documents
+    const query = req.user.role === 'Admin' ? {} : { user_id: userId };
+    
+    const tasks = await Task.find(query);
+    const taskIds = tasks.map(t => t._id);
+    
+    const categories = await Category.find();
+    const users = await User.find({}, '-password');
+    
+    const comments = await Comment.find({ task_id: { $in: taskIds } });
+    const activity_logs = await ActivityLog.find({ task_id: { $in: taskIds } });
 
     res.json({
       export_time: new Date().toISOString(),
@@ -553,59 +659,78 @@ app.get('/api/system/export', async (req, res) => {
   }
 });
 
-app.post('/api/system/import', async (req, res) => {
+app.post('/api/system/import', authenticate, authorize(['Admin', 'Member']), async (req, res) => {
   try {
-    const { tasks, categories, users, comments, activity_logs } = req.body;
+    const { tasks, categories, comments, activity_logs } = req.body;
 
-    if (!tasks || !categories || !users) {
+    if (!tasks || !categories) {
       return res.status(400).json({ error: 'Invalid import data structure' });
     }
 
-    // Clean current databases sequentially
-    await run('DELETE FROM comments');
-    await run('DELETE FROM activity_logs');
-    await run('DELETE FROM tasks');
-    await run('DELETE FROM categories');
-    await run('DELETE FROM users');
+    const userId = req.user.id;
 
-    // Import Users
-    for (const u of users) {
-      await run('INSERT INTO users (id, name, email, avatar, role, created_at) VALUES (?, ?, ?, ?, ?, ?)', [
-        u.id, u.name, u.email, u.avatar, u.role, u.created_at
-      ]);
+    // Purge only user's own items
+    if (req.user.role === 'Admin') {
+      await Comment.deleteMany({});
+      await ActivityLog.deleteMany({});
+      await Task.deleteMany({});
+    } else {
+      const myTasks = await Task.find({ user_id: userId }).select('_id');
+      const myTaskIds = myTasks.map(t => t._id);
+      await Comment.deleteMany({ task_id: { $in: myTaskIds } });
+      await ActivityLog.deleteMany({ task_id: { $in: myTaskIds } });
+      await Task.deleteMany({ user_id: userId });
     }
 
-    // Import Categories
+    // Import Categories (avoid duplicates)
     for (const c of categories) {
-      await run('INSERT INTO categories (id, name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)', [
-        c.id, c.name, c.color, c.icon, c.created_at
-      ]);
-    }
-
-    // Import Tasks
-    for (const t of tasks) {
-      await run(
-        `INSERT INTO tasks (id, title, description, status, priority, category_id, assignee_id, due_date, estimated_minutes, actual_minutes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [t.id, t.title, t.description, t.status, t.priority, t.category_id, t.assignee_id, t.due_date, t.estimated_minutes, t.actual_minutes, t.created_at, t.updated_at]
-      );
-    }
-
-    // Import Comments if any
-    if (comments && comments.length > 0) {
-      for (const com of comments) {
-        await run('INSERT INTO comments (id, task_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)', [
-          com.id, com.task_id, com.user_id, com.content, com.created_at
-        ]);
+      const exists = await Category.findOne({ name: c.name });
+      if (!exists) {
+        await Category.create({ name: c.name, color: c.color, icon: c.icon });
       }
     }
 
-    // Import Logs if any
+    // Import Tasks (force user_id to current user to prevent privilege escalations!)
+    for (const t of tasks) {
+      await Task.create({
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        // Match string/object ids
+        category_id: t.category_id || null,
+        assignee_id: t.assignee_id || null,
+        user_id: req.user.role === 'Admin' ? (t.user_id || userId) : userId,
+        due_date: t.due_date,
+        estimated_minutes: t.estimated_minutes,
+        actual_minutes: t.actual_minutes,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt
+      });
+    }
+
+    // Import Comments
+    if (comments && comments.length > 0) {
+      for (const com of comments) {
+        await Comment.create({
+          task_id: com.task_id,
+          user_id: com.user_id,
+          content: com.content,
+          createdAt: com.createdAt
+        });
+      }
+    }
+
+    // Import Logs
     if (activity_logs && activity_logs.length > 0) {
       for (const log of activity_logs) {
-        await run('INSERT INTO activity_logs (id, task_id, user_id, action, details, created_at) VALUES (?, ?, ?, ?, ?, ?)', [
-          log.id, log.task_id, log.user_id, log.action, log.details, log.created_at
-        ]);
+        await ActivityLog.create({
+          task_id: log.task_id,
+          user_id: log.user_id,
+          action: log.action,
+          details: log.details,
+          createdAt: log.createdAt
+        });
       }
     }
 

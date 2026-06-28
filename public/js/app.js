@@ -1,11 +1,20 @@
 // ==========================================================================
-// Zenith Application Router & Core Controller (Skeleton)
+// Zenith Application Controller & SPA Router
 // ==========================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('Zenith App initialized.');
+window.currentView = 'dashboard';
+window.currentTimerTaskId = null;
+let timerInterval = null;
+let timerSeconds = 25 * 60; // 25 minutes default Focus
+let isTimerRunning = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('Zenith App booting...');
   
-  // Set default view titles
+  // 1. Initialize Components metadata (Users & Categories)
+  await Components.initialize();
+
+  // 2. Setup SPA Views Navigation
   const viewTitles = {
     dashboard: { title: 'Dashboard', subtitle: 'Summary and analytics overview' },
     kanban: { title: 'Kanban Board', subtitle: 'Drag and drop workflow management' },
@@ -20,6 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
     button.addEventListener('click', () => {
       const view = button.dataset.view;
       if (!view) return;
+
+      window.currentView = view;
 
       // Toggle active navigation buttons
       document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
@@ -40,12 +51,213 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('view-subtitle').textContent = metadata.subtitle;
       }
 
-      console.log(`Switched to view: ${view}`);
+      // Render view-specific content
+      renderActiveView(view);
     });
   });
 
-  // Basic modal close functionality
-  window.closeModal = () => {
-    document.getElementById('modal-container').classList.add('hidden');
-  };
+  // 3. Quick Action Buttons
+  const quickNewTaskBtn = document.getElementById('btn-quick-new-task');
+  if (quickNewTaskBtn) {
+    quickNewTaskBtn.onclick = () => Components.showCreateTaskModal();
+  }
+
+  // 4. Global Timer Controls Setup
+  setupTimerControls();
+
+  // 5. Initial View Load
+  renderActiveView('dashboard');
 });
+
+// View router rendering hub
+function renderActiveView(view) {
+  switch (view) {
+    case 'dashboard':
+      renderDashboardView();
+      break;
+    case 'kanban':
+      Components.renderKanban('view-kanban');
+      break;
+    case 'list':
+      Components.renderList('view-list');
+      break;
+    case 'calendar':
+      renderCalendarView();
+      break;
+    case 'logs':
+      renderLogsView();
+      break;
+    case 'settings':
+      renderSettingsView();
+      break;
+    default:
+      console.warn(`Unknown view type requested: ${view}`);
+  }
+}
+
+// Global modal closer helper
+window.closeModal = () => {
+  const container = document.getElementById('modal-container');
+  if (container) container.classList.add('hidden');
+};
+
+// ==========================================
+// View Stubs / Placeholders (Fully coded for next modules)
+// ==========================================
+
+function renderDashboardView() {
+  const panel = document.getElementById('view-dashboard');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="glass-panel">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Workspace Dashboard</h2>
+      <p class="text-secondary" style="margin-bottom: 1.5rem;">Real-time metrics and task performance statistics will appear here (Modules 5 & 6).</p>
+      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
+        Dashboard statistics and charts loading...
+      </div>
+    </div>
+  `;
+}
+
+function renderCalendarView() {
+  const panel = document.getElementById('view-calendar');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="glass-panel">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Visual Deadline Calendar</h2>
+      <p class="text-secondary" style="margin-bottom: 1.5rem;">Monthly grids depicting deadlines will load here (Module 5).</p>
+      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
+        Interactive calendar layout loading...
+      </div>
+    </div>
+  `;
+}
+
+function renderLogsView() {
+  const panel = document.getElementById('view-logs');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="glass-panel">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Audit Logs</h2>
+      <p class="text-secondary" style="margin-bottom: 1.5rem;">Audit logging streams for workspace changes will render here (Module 6).</p>
+      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
+        Workspace audit trail feed loading...
+      </div>
+    </div>
+  `;
+}
+
+function renderSettingsView() {
+  const panel = document.getElementById('view-settings');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="glass-panel">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Workspace Settings</h2>
+      <p class="text-secondary" style="margin-bottom: 1.5rem;">Configure custom categories and export/import workspace data (Module 6).</p>
+      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
+        System settings controls loading...
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================
+// Focus Timer Global Controller Hooks
+// ==========================================
+
+function setupTimerControls() {
+  const toggleBtn = document.getElementById('global-timer-toggle');
+  const resetBtn = document.getElementById('global-timer-reset');
+  const display = document.getElementById('global-timer-display');
+
+  if (!toggleBtn || !resetBtn || !display) return;
+
+  toggleBtn.onclick = () => {
+    if (isTimerRunning) {
+      // Pause
+      clearInterval(timerInterval);
+      isTimerRunning = false;
+      toggleBtn.textContent = 'Resume';
+      display.classList.remove('timer-running');
+    } else {
+      // Start
+      isTimerRunning = true;
+      toggleBtn.textContent = 'Pause';
+      display.classList.add('timer-running');
+      
+      timerInterval = setInterval(() => {
+        timerSeconds--;
+        updateTimerDisplay();
+        
+        if (timerSeconds <= 0) {
+          clearInterval(timerInterval);
+          isTimerRunning = false;
+          toggleBtn.textContent = 'Start';
+          display.classList.remove('timer-running');
+          handleTimerComplete();
+        }
+      }, 1000);
+    }
+  };
+
+  resetBtn.onclick = () => {
+    clearInterval(timerInterval);
+    isTimerRunning = false;
+    timerSeconds = 25 * 60;
+    toggleBtn.textContent = 'Start';
+    display.classList.remove('timer-running');
+    updateTimerDisplay();
+  };
+}
+
+function updateTimerDisplay() {
+  const display = document.getElementById('global-timer-display');
+  if (!display) return;
+
+  const mins = Math.floor(timerSeconds / 60);
+  const secs = timerSeconds % 60;
+  display.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Invoked from Components.js when user clicks "Load Focus Timer"
+window.loadTimerTask = (taskId, taskTitle) => {
+  window.currentTimerTaskId = taskId;
+  
+  const label = document.getElementById('global-timer-task-name');
+  const toggleBtn = document.getElementById('global-timer-toggle');
+  const resetBtn = document.getElementById('global-timer-reset');
+
+  if (label) label.textContent = taskTitle;
+  if (toggleBtn) toggleBtn.disabled = false;
+  if (resetBtn) resetBtn.disabled = false;
+
+  // Reset clock
+  clearInterval(timerInterval);
+  isTimerRunning = false;
+  timerSeconds = 25 * 60;
+  if (toggleBtn) toggleBtn.textContent = 'Start';
+  const display = document.getElementById('global-timer-display');
+  if (display) {
+    display.classList.remove('timer-running');
+    updateTimerDisplay();
+  }
+};
+
+async function handleTimerComplete() {
+  if (!window.currentTimerTaskId) return;
+
+  const originalTaskId = window.currentTimerTaskId;
+  Utils.showToast('Great job! 25 minutes of focus completed.', 'info');
+
+  try {
+    // Log 25 minutes to task actual_minutes
+    await API.logTime(originalTaskId, 25, 1); // Mock user ID 1 (Sarah) for time log
+    Utils.showToast('Focus session logged to database.');
+    
+    // Refresh background lists/kanban
+    if (window.currentView === 'kanban') Components.renderKanban('view-kanban');
+    if (window.currentView === 'list') Components.renderList('view-list');
+  } catch (err) {
+    Utils.showToast(`Failed to automatically log timer minutes: ${err.message}`, 'error');
+  }
+}

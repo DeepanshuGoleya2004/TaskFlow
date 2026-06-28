@@ -70,6 +70,6 @@ The application will launch and be accessible at [http://localhost:3000](http://
 
 ---
 
-## Current Status: Implementing Calendar, Timer & Charts (Module 5)
-- **Overall Completion**: `67%`
-- **Active Module**: `Module 5: Interactive Calendar, Pomodoro Timer & Charts` (Module 1, 2, 3, & 4 Completed)
+## Current Status: Implementing Settings & Logs (Module 6)
+- **Overall Completion**: `83%`
+- **Active Module**: `Module 6: Settings, Imports/Exports & Activity Logs` (Module 1, 2, 3, 4, & 5 Completed)

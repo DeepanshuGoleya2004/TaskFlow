@@ -1,11 +1,13 @@
 // ==========================================================================
-// Zenith Interactive Components (Kanban Board, List, and Task Detail Modals)
+// Zenith Interactive Components (Dashboard, Kanban, List, Calendar, and Modals)
 // ==========================================================================
 
 const Components = {
-  // Store loaded users & categories in memory for quick lookups
+  // Store loaded metadata and charts
   users: [],
   categories: [],
+  charts: {},
+  calendarDate: new Date(),
 
   async initialize() {
     try {
@@ -18,7 +20,154 @@ const Components = {
   },
 
   // ==========================================
-  // 1. Kanban Board Component
+  // 1. Dashboard Component (with Animated Charts)
+  // ==========================================
+  async renderDashboard(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading dashboard metrics...</div>';
+
+    try {
+      const stats = await API.getStats();
+
+      container.innerHTML = `
+        <!-- Top Stats Cards Grid -->
+        <div class="dashboard-grid-stats">
+          <div class="stat-card glass-panel">
+            <div class="stat-icon-wrapper todo">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div class="stat-details">
+              <h3>Total Tasks</h3>
+              <div class="stat-number">${stats.total_tasks}</div>
+            </div>
+          </div>
+          
+          <div class="stat-card glass-panel">
+            <div class="stat-icon-wrapper progress">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+            </div>
+            <div class="stat-details">
+              <h3>In Progress</h3>
+              <div class="stat-number">${stats.in_progress_tasks}</div>
+            </div>
+          </div>
+
+          <div class="stat-card glass-panel">
+            <div class="stat-icon-wrapper completed">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+            <div class="stat-details">
+              <h3>Completion Rate</h3>
+              <div class="stat-number">${stats.completion_rate}%</div>
+            </div>
+          </div>
+
+          <div class="stat-card glass-panel">
+            <div class="stat-icon-wrapper overdue">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <div class="stat-details">
+              <h3>Overdue Tasks</h3>
+              <div class="stat-number" style="color: ${stats.overdue_tasks > 0 ? 'var(--priority-urgent)' : 'inherit'}">${stats.overdue_tasks}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Layout Row -->
+        <div class="dashboard-row-analytics">
+          <div class="glass-panel" style="height: 350px;">
+            <div class="chart-panel-header">
+              <h2>Workload Distribution</h2>
+              <span class="text-muted" style="font-size: 0.8rem;">Task count by category</span>
+            </div>
+            <div class="chart-canvas-wrapper">
+              <canvas id="chart-workload"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-panel" style="height: 350px;">
+            <div class="chart-panel-header">
+              <h2>Focus Hours Spent</h2>
+              <span class="text-muted" style="font-size: 0.8rem;">Total minutes logged</span>
+            </div>
+            <div class="chart-canvas-wrapper">
+              <canvas id="chart-time"></canvas>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Render actual charts
+      this.renderDashboardCharts(stats);
+    } catch (err) {
+      container.innerHTML = `<div class="error-msg">Error loading dashboard: ${err.message}</div>`;
+    }
+  },
+
+  renderDashboardCharts(stats) {
+    // Destroy previous chart instances if they exist
+    if (this.charts.workload) this.charts.workload.destroy();
+    if (this.charts.time) this.charts.time.destroy();
+
+    const workloadCtx = document.getElementById('chart-workload');
+    const timeCtx = document.getElementById('chart-time');
+
+    if (!workloadCtx || !timeCtx) return;
+
+    // Process workload distribution data
+    const workloadLabels = stats.category_distribution.map(c => c.category_name || 'Uncategorized');
+    const workloadData = stats.category_distribution.map(c => c.count);
+    const workloadColors = stats.category_distribution.map(c => c.category_color || '#8b98a5');
+
+    // Process time spent data
+    const timeLabels = stats.time_spent_by_category.map(c => c.category_name || 'Uncategorized');
+    const timeData = stats.time_spent_by_category.map(c => c.total_actual_minutes || 0);
+    const timeColors = stats.time_spent_by_category.map(c => c.category_color || '#8b98a5');
+
+    // Build Workload Distribution Chart (Bar Chart)
+    this.charts.workload = new Chart(workloadCtx, {
+      type: 'bar',
+      data: {
+        labels: workloadLabels,
+        datasets: [{
+          label: 'Tasks Count',
+          data: workloadData,
+          backgroundColor: workloadColors.map(c => c.replace(')', ', 0.35)').replace('hsl', 'hsla')),
+          borderColor: workloadColors,
+          borderWidth: 1.5,
+          borderRadius: 6
+        }]
+      },
+      options: Utils.getChartOptions()
+    });
+
+    // Build Time Logged Chart (Doughnut Chart)
+    this.charts.time = new Chart(timeCtx, {
+      type: 'doughnut',
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          data: timeData,
+          backgroundColor: timeColors.map(c => c.replace(')', ', 0.45)').replace('hsl', 'hsla')),
+          borderColor: timeColors,
+          borderWidth: 1.5
+        }]
+      },
+      options: {
+        ...Utils.getChartOptions(),
+        scales: {
+          x: { display: false },
+          y: { display: false }
+        },
+        cutout: '70%'
+      }
+    });
+  },
+
+  // ==========================================
+  // 2. Kanban Board Component
   // ==========================================
   async renderKanban(containerId) {
     const container = document.getElementById(containerId);
@@ -35,7 +184,6 @@ const Components = {
         'Completed': []
       };
 
-      // Group tasks by status
       tasks.forEach(task => {
         if (columns[task.status]) {
           columns[task.status].push(task);
@@ -43,8 +191,6 @@ const Components = {
       });
 
       let html = '<div class="kanban-board">';
-      
-      // Render columns
       for (const [status, statusTasks] of Object.entries(columns)) {
         const dotClass = status.toLowerCase().replace(' ', '');
         html += `
@@ -59,7 +205,6 @@ const Components = {
             <div class="column-cards-container">
         `;
 
-        // Render cards inside column
         statusTasks.forEach(task => {
           const priorityClass = task.priority.toLowerCase();
           const catStyle = Utils.getCategoryStyle(task.category_color);
@@ -102,7 +247,6 @@ const Components = {
     }
   },
 
-  // HTML5 Drag and Drop handlers
   onDragStart(event, taskId) {
     event.dataTransfer.setData('text/plain', taskId);
     event.currentTarget.classList.add('dragging');
@@ -131,7 +275,6 @@ const Components = {
       await API.updateTask(taskId, { status: status });
       Utils.showToast(`Task status updated to "${status}"`);
       
-      // Refresh current view
       if (window.currentView === 'kanban') {
         this.renderKanban('view-kanban');
       } else if (window.currentView === 'list') {
@@ -143,7 +286,7 @@ const Components = {
   },
 
   // ==========================================
-  // 2. Task List / Grid View Component
+  // 3. Task List / Grid View Component
   // ==========================================
   currentFilters: {
     status: '',
@@ -159,12 +302,10 @@ const Components = {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Build filter UI and Table Shell if not already built
     let filterBar = container.querySelector('.filter-bar');
     let tableContainer = container.querySelector('.list-table-container');
 
     if (!filterBar || !tableContainer) {
-      // Build filter bar elements
       let categoryOptions = '<option value="">All Categories</option>';
       this.categories.forEach(c => {
         categoryOptions += `<option value="${c.id}">${c.icon} ${c.name}</option>`;
@@ -224,7 +365,6 @@ const Components = {
         </div>
       `;
 
-      // Attach filter change listeners
       document.getElementById('list-filter-search').addEventListener('input', (e) => {
         this.currentFilters.search = e.target.value;
         this.fetchAndRenderListBody();
@@ -257,23 +397,17 @@ const Components = {
     try {
       let tasks = await API.getTasks(this.currentFilters);
 
-      // Sort client-side
       tasks.sort((a, b) => {
         let valA = a[this.sortBy];
         let valB = b[this.sortBy];
 
-        // Handle nulls
         if (valA === null || valA === undefined) valA = '';
         if (valB === null || valB === undefined) valB = '';
 
         if (typeof valA === 'string') {
-          return this.sortOrder === 'asc' 
-            ? valA.localeCompare(valB) 
-            : valB.localeCompare(valA);
+          return this.sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
         } else {
-          return this.sortOrder === 'asc' 
-            ? valA - valB 
-            : valB - valA;
+          return this.sortOrder === 'asc' ? valA - valB : valB - valA;
         }
       });
 
@@ -340,7 +474,127 @@ const Components = {
   },
 
   // ==========================================
-  // 3. Task Details Modal Component
+  // 4. Calendar Component
+  // ==========================================
+  async renderCalendar(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading calendar dates...</div>';
+
+    try {
+      const tasks = await API.getTasks();
+      const year = this.calendarDate.getFullYear();
+      const month = this.calendarDate.getMonth();
+
+      // Start of month day (0-6)
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      // Total days in month
+      const totalDays = new Date(year, month + 1, 0).getDate();
+      // Total days in previous month
+      const prevTotalDays = new Date(year, month, 0).getDate();
+
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+
+      let html = `
+        <div class="glass-panel">
+          <div class="calendar-header">
+            <h2>${monthNames[month]} ${year}</h2>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary" onclick="Components.navigateCalendar(-1)" style="padding: 0.5rem 0.8rem;">&lt;</button>
+              <button class="btn btn-secondary" onclick="Components.navigateCalendar(0)" style="padding: 0.5rem 0.8rem;">Today</button>
+              <button class="btn btn-secondary" onclick="Components.navigateCalendar(1)" style="padding: 0.5rem 0.8rem;">&gt;</button>
+            </div>
+          </div>
+          <div class="calendar-grid">
+            <!-- Day labels -->
+            <div class="calendar-day-label">Sun</div>
+            <div class="calendar-day-label">Mon</div>
+            <div class="calendar-day-label">Tue</div>
+            <div class="calendar-day-label">Wed</div>
+            <div class="calendar-day-label">Thu</div>
+            <div class="calendar-day-label">Fri</div>
+            <div class="calendar-day-label">Sat</div>
+      `;
+
+      // Render previous month's padding cells
+      for (let i = firstDayIndex; i > 0; i--) {
+        const d = prevTotalDays - i + 1;
+        html += `
+          <div class="calendar-cell inactive">
+            <div class="calendar-date">${d}</div>
+          </div>
+        `;
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Render active month cells
+      for (let day = 1; day <= totalDays; day++) {
+        const currentCellDate = new Date(year, month, day);
+        // ISO YYYY-MM-DD
+        const currentCellDateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        
+        // Find tasks due on this date
+        const cellTasks = tasks.filter(t => t.due_date === currentCellDateStr);
+        const isToday = currentCellDateStr === todayStr;
+
+        html += `
+          <div class="calendar-cell ${isToday ? 'today' : ''}">
+            <div class="calendar-date">${day}</div>
+            <div style="display: flex; flex-direction: column; gap: 0.3rem; overflow-y: auto; flex-grow: 1;">
+              ${cellTasks.map(t => {
+                const priorityColor = t.priority === 'Urgent' ? 'var(--priority-urgent)' : (t.priority === 'High' ? 'var(--priority-high)' : 'var(--primary)');
+                const borderHsl = t.category_color || priorityColor;
+                const bgHsl = borderHsl.replace(')', ', 0.15)').replace('hsl', 'hsla');
+                
+                return `
+                  <div class="calendar-task-item" style="background: ${bgHsl}; border-left: 3px solid ${borderHsl}; color: #fff;" onclick="Components.showTaskDetails(${t.id}); event.stopPropagation();">
+                    ${t.title}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render next month's padding cells to fill the grid (total cells should be multiple of 7)
+      const totalCellsFilled = firstDayIndex + totalDays;
+      const cellsToFill = 42 - totalCellsFilled; // 6 rows of 7 = 42
+      for (let i = 1; i <= cellsToFill; i++) {
+        html += `
+          <div class="calendar-cell inactive">
+            <div class="calendar-date">${i}</div>
+          </div>
+        `;
+      }
+
+      html += `
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+    } catch (err) {
+      container.innerHTML = `<div class="error-msg">Error loading calendar: ${err.message}</div>`;
+    }
+  },
+
+  navigateCalendar(direction) {
+    if (direction === 0) {
+      this.calendarDate = new Date();
+    } else {
+      this.calendarDate.setMonth(this.calendarDate.getMonth() + direction);
+    }
+    this.renderCalendar('view-calendar');
+  },
+
+  // ==========================================
+  // 5. Task Details Modal Component
   // ==========================================
   async showTaskDetails(taskId) {
     const overlay = document.getElementById('modal-container');
@@ -352,13 +606,11 @@ const Components = {
     try {
       const task = await API.getTask(taskId);
 
-      // Build categories options
       let categoryOptions = '<option value="">No Category</option>';
       this.categories.forEach(c => {
         categoryOptions += `<option value="${c.id}" ${task.category_id === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`;
       });
 
-      // Build users options
       let assigneeOptions = '<option value="">No Assignee</option>';
       this.users.forEach(u => {
         assigneeOptions += `<option value="${u.id}" ${task.assignee_id === u.id ? 'selected' : ''}>${u.name} (${u.role})</option>`;
@@ -454,12 +706,10 @@ const Components = {
                     <span>Estimate: <strong>${Utils.formatMinutes(task.estimated_minutes)}</strong></span>
                   </div>
                   
-                  <!-- Progress Bar -->
                   <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; margin-bottom: 1.2rem;">
                     <div style="width: ${progressPercent}%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--primary)); border-radius: 4px;"></div>
                   </div>
 
-                  <!-- Focus Timer Launch -->
                   <button class="btn btn-secondary" style="width: 100%; display: flex; justify-content: center; gap: 0.5rem;" onclick="Components.loadTaskToTimer(${task.id}, '${task.title.replace(/'/g, "\\'")}')">
                     ⏱️ Load Focus Timer
                   </button>
@@ -534,11 +784,8 @@ const Components = {
       await API.postComment(taskId, { user_id: userId, content: content });
       input.value = '';
       Utils.showToast('Comment posted successfully');
-      
-      // Refresh Details Modal (remains open)
       this.showTaskDetails(taskId);
       
-      // Refresh current view (in case count indicators update)
       if (window.currentView === 'kanban') this.renderKanban('view-kanban');
       if (window.currentView === 'list') this.renderList('view-list');
     } catch (err) {
@@ -574,7 +821,6 @@ const Components = {
       Utils.showToast('Task updated successfully');
       closeModal();
       
-      // Refresh background view
       if (window.currentView === 'kanban') this.renderKanban('view-kanban');
       if (window.currentView === 'list') this.renderList('view-list');
     } catch (err) {
@@ -590,7 +836,6 @@ const Components = {
       Utils.showToast('Task deleted successfully');
       closeModal();
 
-      // Refresh background view
       if (window.currentView === 'kanban') this.renderKanban('view-kanban');
       if (window.currentView === 'list') this.renderList('view-list');
     } catch (err) {
@@ -598,7 +843,6 @@ const Components = {
     }
   },
 
-  // Load selected task into the Global Pomodoro timer
   loadTaskToTimer(taskId, taskTitle) {
     if (window.loadTimerTask) {
       window.loadTimerTask(taskId, taskTitle);
@@ -608,19 +852,17 @@ const Components = {
   },
 
   // ==========================================
-  // 4. Create Task Modal Component
+  // 6. Create Task Modal Component
   // ==========================================
   showCreateTaskModal() {
     const overlay = document.getElementById('modal-container');
     if (!overlay) return;
 
-    // Build categories options
     let categoryOptions = '<option value="">No Category</option>';
     this.categories.forEach(c => {
       categoryOptions += `<option value="${c.id}">${c.icon} ${c.name}</option>`;
     });
 
-    // Build users options
     let assigneeOptions = '<option value="">No Assignee</option>';
     this.users.forEach(u => {
       assigneeOptions += `<option value="${u.id}">${u.name} (${u.role})</option>`;
@@ -733,7 +975,6 @@ const Components = {
       Utils.showToast('Task created successfully');
       closeModal();
 
-      // Refresh current view
       if (window.currentView === 'kanban') this.renderKanban('view-kanban');
       if (window.currentView === 'list') this.renderList('view-list');
     } catch (err) {

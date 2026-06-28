@@ -106,31 +106,11 @@ window.closeModal = () => {
 // ==========================================
 
 function renderDashboardView() {
-  const panel = document.getElementById('view-dashboard');
-  if (!panel) return;
-  panel.innerHTML = `
-    <div class="glass-panel">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Workspace Dashboard</h2>
-      <p class="text-secondary" style="margin-bottom: 1.5rem;">Real-time metrics and task performance statistics will appear here (Modules 5 & 6).</p>
-      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
-        Dashboard statistics and charts loading...
-      </div>
-    </div>
-  `;
+  Components.renderDashboard('view-dashboard');
 }
 
 function renderCalendarView() {
-  const panel = document.getElementById('view-calendar');
-  if (!panel) return;
-  panel.innerHTML = `
-    <div class="glass-panel">
-      <h2 style="font-family: var(--font-heading); margin-bottom: 0.5rem;">Visual Deadline Calendar</h2>
-      <p class="text-secondary" style="margin-bottom: 1.5rem;">Monthly grids depicting deadlines will load here (Module 5).</p>
-      <div style="padding: 2rem; text-align: center; border: 1px dashed var(--border-glass); border-radius: var(--radius-md); color: var(--text-muted);">
-        Interactive calendar layout loading...
-      </div>
-    </div>
-  `;
+  Components.renderCalendar('view-calendar');
 }
 
 function renderLogsView() {

@@ -108,5 +108,6 @@ The system consists of:
 | v0.1 | 2026-06-28 | Completed | Initial design, core database, and backend administration server built (Module 1 complete). |
 | v0.2 | 2026-06-28 | Completed | REST API endpoints implemented for tasks, categories, users, comments, and stats; automated testing suite completed (Module 2 complete). |
 | v0.3 | 2026-06-28 | Completed | Glassmorphic visual style guide CSS variables, sidebar layouts, navigation routers, global timer widget hooks (Module 3 complete). |
-| v0.4 | 2026-06-28 | In Progress | Built interactive Kanban Board with HTML5 drag-and-drop status relocations, filterable task list views, and a detailed task management modal (Module 4 complete). |
+| v0.4 | 2026-06-28 | Completed | Built interactive Kanban Board with HTML5 drag-and-drop status relocations, filterable task list views, and a detailed task management modal (Module 4 complete). |
+| v0.5 | 2026-06-28 | In Progress | Built deadline calendars with navigations, Global focus tracker time-logger triggers, and workload/time-spent analytics dashboards via Chart.js (Module 5 complete). |
 

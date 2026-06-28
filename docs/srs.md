@@ -105,5 +105,6 @@ The system consists of:
 
 | Version | Date | Status | Description |
 | :--- | :--- | :--- | :--- |
-| v0.1 | 2026-06-28 | In Progress | Initial design, core database, and backend administration server built (Module 1 complete). |
+| v0.1 | 2026-06-28 | Completed | Initial design, core database, and backend administration server built (Module 1 complete). |
+| v0.2 | 2026-06-28 | In Progress | REST API endpoints implemented for tasks, categories, users, comments, and stats; automated testing suite completed (Module 2 complete). |
 

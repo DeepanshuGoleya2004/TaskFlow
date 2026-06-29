@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.preventDefault();
       const loginId = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
+      const rememberMe = document.getElementById('login-remember').checked;
 
       const spinner = document.getElementById('login-spinner');
       const submitBtn = document.getElementById('btn-login-submit');
@@ -56,6 +57,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const res = await API.login({ loginId, password });
         localStorage.setItem('token', res.token);
+
+        if (rememberMe) {
+          localStorage.setItem('rememberMe', 'true');
+          localStorage.setItem('rememberedUser', loginId);
+        } else {
+          localStorage.removeItem('rememberMe');
+          localStorage.removeItem('rememberedUser');
+        }
 
         Utils.showToast('Login successful! Loading workspace...');
         window.currentUser = null;
@@ -110,8 +119,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (err) {
         console.warn('Logout API warning:', err);
       } finally {
+        const rememberMe = localStorage.getItem('rememberMe');
+        const rememberedUser = localStorage.getItem('rememberedUser');
+
         localStorage.removeItem('token');
         localStorage.clear();
+        sessionStorage.clear();
 
         // Clear all cookies
         document.cookie.split(";").forEach((c) => {
@@ -121,6 +134,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         window.currentUser = null;
+
+        if (rememberMe === 'true') {
+          localStorage.setItem('rememberMe', 'true');
+          localStorage.setItem('rememberedUser', rememberedUser);
+        }
+
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) loginForm.reset();
+
+        const emailInput = document.getElementById('login-email');
+        const passInput = document.getElementById('login-password');
+        const rememberChk = document.getElementById('login-remember');
+        if (emailInput) emailInput.value = (rememberMe === 'true') ? (rememberedUser || '') : '';
+        if (passInput) passInput.value = '';
+        if (rememberChk) rememberChk.checked = (rememberMe === 'true');
 
         if (isTimerRunning) {
           clearInterval(timerInterval);
@@ -305,6 +333,17 @@ function showAuthView(cardToShow) {
       c.classList.add('hidden');
     }
   });
+
+  if (cardToShow === 'login-card') {
+    const rememberMe = localStorage.getItem('rememberMe') === 'true';
+    const rememberedUser = localStorage.getItem('rememberedUser');
+    const emailInput = document.getElementById('login-email');
+    const passInput = document.getElementById('login-password');
+    const rememberChk = document.getElementById('login-remember');
+    if (emailInput) emailInput.value = rememberMe ? (rememberedUser || '') : '';
+    if (passInput) passInput.value = '';
+    if (rememberChk) rememberChk.checked = rememberMe;
+  }
 
   API.request('GET', '/auth/check-users')
     .then(res => {

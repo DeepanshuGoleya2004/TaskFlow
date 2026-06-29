@@ -29,6 +29,11 @@ const API = {
       const data = await response.json();
       
       if (!response.ok) {
+        if (response.status === 401) {
+          if (window.app && typeof window.app.handleUserLogout === 'function') {
+            window.app.handleUserLogout();
+          }
+        }
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
       

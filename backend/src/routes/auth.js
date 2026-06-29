@@ -82,10 +82,27 @@ router.post('/register', registerValidation, async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { loginId, email, password } = req.body;
-    const identifier = loginId || email; // support both keys
+    const identifier = loginId || email;
 
     if (!identifier || !password) {
       return res.status(400).json({ error: 'Email/Mobile and password are required' });
+    }
+
+    // Validate email/mobile format
+    const isEmail = identifier.includes('@');
+    if (isEmail) {
+      if (!/^\S+@\S+\.\S+$/.test(identifier)) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    } else {
+      if (!/^\d{7,15}$/.test(identifier)) {
+        return res.status(400).json({ error: 'Invalid mobile number format' });
+      }
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      return res.status(401).json({ error: 'Incorrect password.' });
     }
 
     // Search user by email or mobile
@@ -97,12 +114,12 @@ router.post('/login', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid login credentials' });
+      return res.status(401).json({ error: 'User not found.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid login credentials' });
+      return res.status(401).json({ error: 'Incorrect password.' });
     }
 
     // Generate JWT Token

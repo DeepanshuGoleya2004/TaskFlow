@@ -203,9 +203,8 @@ async function handleRouting() {
   // 1. Unauthenticated Route Guard Redirects
   if (!token) {
     if (!isPublic) {
-      console.log('Unauthenticated access blocked. Redirecting to landing page.');
-      window.location.hash = '#/';
-      showLandingView();
+      console.log('Unauthenticated access blocked. Redirecting to login.');
+      window.location.hash = '#/login';
       return;
     }
 

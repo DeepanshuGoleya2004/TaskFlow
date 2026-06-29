@@ -324,6 +324,14 @@ function updateHeaderProfileUI(profile) {
   if (avatarEl) avatarEl.textContent = profile.avatar || '??';
   if (nameEl) nameEl.textContent = profile.fullName || 'User';
 
+  // Bind Sidebar user widgets details
+  const sidebarAvatarEl = document.getElementById('sidebar-user-avatar');
+  const sidebarNameEl = document.getElementById('sidebar-user-name');
+  const sidebarEmailEl = document.getElementById('sidebar-user-email');
+  if (sidebarAvatarEl) sidebarAvatarEl.textContent = profile.avatar || '??';
+  if (sidebarNameEl) sidebarNameEl.textContent = profile.fullName || 'User';
+  if (sidebarEmailEl) sidebarEmailEl.textContent = profile.email || '';
+
   const guestBadge = document.getElementById('header-guest-badge');
   const upgradeBtn = document.getElementById('btn-header-upgrade');
   const warningBanner = document.getElementById('guest-warning-banner');

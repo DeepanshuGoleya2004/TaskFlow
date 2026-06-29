@@ -1,6 +1,4 @@
-// ==========================================================================
-// Zenith App Utilities & UI Helpers
-// ==========================================================================
+// Utility helpers and UI notification tools
 
 const Utils = {
   // Format minutes into "Xh Ym"

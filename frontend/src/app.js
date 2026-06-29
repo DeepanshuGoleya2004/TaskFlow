@@ -379,9 +379,7 @@ window.closeModal = () => {
   if (container) container.classList.add('hidden');
 };
 
-// ==========================================
-// Focus Timer Global Controller Hooks
-// ==========================================
+// Focus timer controls
 function setupTimerControls() {
   const toggleBtn = document.getElementById('global-timer-toggle');
   const resetBtn = document.getElementById('global-timer-reset');

@@ -11,9 +11,7 @@ const ActivityLog = require('../models/ActivityLog');
 
 const router = express.Router();
 
-// ==========================================
-// 1. Dashboard Statistics
-// ==========================================
+// Dashboard statistics
 router.get('/dashboard/stats', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -83,9 +81,7 @@ router.get('/dashboard/stats', authenticate, async (req, res) => {
   }
 });
 
-// ==========================================
-// 2. Tasks CRUD Endpoints
-// ==========================================
+// Task CRUD operations
 
 // GET List of Tasks (Scoped by RBAC)
 router.get('/tasks', authenticate, async (req, res) => {
@@ -480,9 +476,7 @@ router.delete('/categories/:id', authenticate, authorize(['Admin', 'Member']), a
   }
 });
 
-// ==========================================
-// 4. Users Endpoints
-// ==========================================
+// System users
 router.get('/users', authenticate, async (req, res) => {
   try {
     const users = await User.find({}, '-password').sort({ fullName: 1 });
@@ -522,9 +516,7 @@ router.post('/users', authenticate, authorize(['Admin']), async (req, res) => {
   }
 });
 
-// ==========================================
-// 5. Comments Endpoints
-// ==========================================
+// Activity audit logs
 router.post('/tasks/:id/comments', authenticate, async (req, res) => {
   try {
     const taskId = req.params.id;
@@ -565,9 +557,7 @@ router.post('/tasks/:id/comments', authenticate, async (req, res) => {
   }
 });
 
-// ==========================================
-// 6. Global Activity Logs
-// ==========================================
+// Global activity logs
 router.get('/activity-logs', authenticate, async (req, res) => {
   try {
     const filter = {};
@@ -606,9 +596,7 @@ router.get('/activity-logs', authenticate, async (req, res) => {
   }
 });
 
-// ==========================================
-// 7. System Data Import & Export (Members and Admins only, Guest blocked!)
-// ==========================================
+// System data import and export
 router.get('/system/export', authenticate, authorize(['Admin', 'Member']), async (req, res) => {
   try {
     const userId = req.user.id;

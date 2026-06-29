@@ -1,6 +1,4 @@
-// ==========================================================================
-// Zenith API client layer using Fetch
-// ==========================================================================
+// API wrapper for communicating with the backend server
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 

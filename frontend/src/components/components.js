@@ -1236,6 +1236,87 @@ const Components = {
       }
     };
     reader.readAsText(file);
+  },
+
+  async renderProfile(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading profile details...</div>';
+
+    try {
+      const profile = await API.getProfile();
+      const joinedDateFormatted = new Date(profile.joinedDate).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      container.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 2rem; margin-top: 1rem;">
+          <!-- Profile Badge Left Panel -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 2.5rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: var(--shadow-main); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
+            <div style="width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent-cyan)); color: #fff; font-size: 2.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; box-shadow: 0 0 20px var(--primary-glow); border: 3px solid rgba(255, 255, 255, 0.1);">
+              ${profile.avatar || 'U'}
+            </div>
+            
+            <h2 style="font-size: 1.8rem; font-weight: 700; margin-bottom: 0.4rem; font-family: var(--font-heading); color: var(--text-primary);">${profile.fullName}</h2>
+            <p style="color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1.2rem;">${profile.email}</p>
+            
+            <div style="display: inline-block; padding: 0.4rem 1.2rem; background: rgba(130, 80, 250, 0.12); border: 1px solid rgba(130, 80, 250, 0.25); border-radius: 50px; color: var(--primary); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1.5rem;">
+              ${profile.role}
+            </div>
+            
+            <div style="border-top: 1px solid var(--border-glass); width: 100%; padding-top: 1.5rem; color: var(--text-muted); font-size: 0.85rem;">
+              <span>Member since: <strong>${joinedDateFormatted}</strong></span>
+            </div>
+          </div>
+
+          <!-- Account Statistics Right Panel -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- Main Stats Card -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 2rem; box-shadow: var(--shadow-main); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); flex-grow: 1;">
+              <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; font-family: var(--font-heading); color: var(--text-primary); border-bottom: 1px solid var(--border-glass); padding-bottom: 0.8rem;">Workspace Productivity Summary</h3>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <div style="background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem; text-align: center;">
+                  <span style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Assigned Tasks</span>
+                  <span style="font-size: 2.2rem; font-weight: 800; font-family: var(--font-heading); color: var(--accent-cyan);">${profile.stats.total_tasks}</span>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.01); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.5rem; text-align: center;">
+                  <span style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">Completed Tasks</span>
+                  <span style="font-size: 2.2rem; font-weight: 800; font-family: var(--font-heading); color: var(--color-completed);">${profile.stats.completed_tasks}</span>
+                </div>
+              </div>
+
+              <!-- Completion Progress Bar -->
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.6rem;">
+                  <span style="color: var(--text-secondary); font-weight: 500;">Task Completion Rate</span>
+                  <span style="color: var(--primary); font-weight: 600;">${profile.stats.completion_percent}%</span>
+                </div>
+                <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden; margin-bottom: 1.5rem;">
+                  <div style="width: ${profile.stats.completion_percent}%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--primary)); border-radius: 5px;"></div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Quick Actions Options Card -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 1.5rem 2rem; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow-main); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
+              <div>
+                <h4 style="font-size: 1.05rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.2rem;">Account Security</h4>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Logout of your active web session securely.</p>
+              </div>
+              <button class="btn btn-danger" onclick="app.handleUserLogout()">
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--priority-urgent);">Failed to load profile details: ${err.message}</div>`;
+    }
   }
 };
 

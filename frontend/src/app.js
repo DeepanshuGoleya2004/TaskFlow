@@ -1,6 +1,4 @@
-// ==========================================================================
-// Zenith Application Controller & SPA Hash Router
-// ==========================================================================
+
 
 window.currentView = 'dashboard';
 window.currentTimerTaskId = null;
@@ -25,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (sunIcon) sunIcon.classList.add('hidden');
     if (moonIcon) moonIcon.classList.remove('hidden');
   }
-  
+
   // Setup Auth hooks and actions globally for UI elements
   window.app = {
     togglePassword(inputId) {
@@ -34,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         el.type = el.type === 'password' ? 'text' : 'password';
       }
     },
-    
+
     showAuthCard(cardId) {
       // Direct navigate via URL hash
       if (cardId === 'signup-card') {
@@ -48,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.preventDefault();
       const email = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
-      
+
       const spinner = document.getElementById('login-spinner');
       const submitBtn = document.getElementById('btn-login-submit');
 
@@ -58,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const res = await API.login({ email, password });
         localStorage.setItem('token', res.token);
-        
+
         Utils.showToast('Login successful! Loading workspace...');
         // Reset current user cache
         window.currentUser = null;
@@ -87,13 +85,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const res = await API.register({ fullName, email, password, confirmPassword });
         Utils.showToast(res.message);
-        
+
         // Reset form
         document.getElementById('signup-form').reset();
-        
+
         // Redirect to login hash
         window.location.hash = '#/login';
-        
+
         // Pre-fill email
         setTimeout(() => {
           const emailInput = document.getElementById('login-email');
@@ -112,7 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         Utils.showToast('Generating guest sandbox session...');
         const res = await API.guestLogin();
         localStorage.setItem('token', res.token);
-        
+
         Utils.showToast('Guest Login successful!');
         window.currentUser = null;
         window.location.hash = '#/dashboard';
@@ -132,13 +130,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       } finally {
         localStorage.removeItem('token');
         window.currentUser = null;
-        
+
         // Force timer reset
         if (isTimerRunning) {
           clearInterval(timerInterval);
           isTimerRunning = false;
         }
-        
+
         Utils.showToast('Logged out successfully.');
         window.location.hash = '#/';
       }
@@ -204,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function handleRouting() {
   const hash = window.location.hash || '#/';
   const token = localStorage.getItem('token');
-  
+
   const landingView = document.getElementById('landing-view');
   const authView = document.getElementById('auth-view');
   const appView = document.getElementById('app-view');
@@ -220,7 +218,7 @@ async function handleRouting() {
       showLandingView();
       return;
     }
-    
+
     // Process public pages rendering
     if (hash === '#/') {
       showLandingView();
@@ -405,10 +403,10 @@ function setupTimerControls() {
           isTimerRunning = false;
           toggleBtn.textContent = 'Start';
           display.classList.remove('timer-running');
-          
+
           timerSeconds = 25 * 60;
           display.textContent = '25:00';
-          
+
           if (window.currentTimerTaskId) {
             API.logTime(window.currentTimerTaskId, 25, window.currentUser ? window.currentUser.id : null)
               .then(() => {
@@ -437,7 +435,7 @@ function setupTimerControls() {
 // Invoked from Components.js when user clicks "Load Focus Timer"
 window.loadTimerTask = (taskId, taskTitle) => {
   window.currentTimerTaskId = taskId;
-  
+
   const label = document.getElementById('global-timer-task-name');
   const toggleBtn = document.getElementById('global-timer-toggle');
   const resetBtn = document.getElementById('global-timer-reset');

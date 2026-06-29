@@ -32,6 +32,19 @@ const Components = {
       const stats = await API.getStats();
 
       container.innerHTML = `
+        <!-- Welcome Banner Profile Summary -->
+        <div class="glass-panel" style="display: flex; align-items: center; gap: 1.5rem; padding: 1.25rem 2rem; margin-bottom: 2rem; border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border-glass); box-shadow: var(--shadow-main); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
+          <div style="width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent-cyan)); color: #fff; font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--primary-glow); border: 2px solid rgba(255, 255, 255, 0.1); flex-shrink: 0;">
+            ${stats.user ? stats.user.avatar : 'U'}
+          </div>
+          <div style="flex-grow: 1;">
+            <h2 style="font-size: 1.3rem; font-weight: 700; margin: 0; color: var(--text-primary); font-family: var(--font-heading);">Welcome back, ${stats.user ? stats.user.fullName : 'User'}!</h2>
+            <p style="margin: 0.15rem 0 0; color: var(--text-secondary); font-size: 0.85rem;">
+              Account: <strong style="color: var(--primary); font-weight: 600;">${stats.user ? stats.user.email : ''}</strong> &bull; Role: <span style="text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; font-weight: 700; color: var(--accent-cyan);">${stats.user ? stats.user.role : ''}</span> &bull; Member Since: <span>${stats.user ? new Date(stats.user.joinedDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : ''}</span>
+            </p>
+          </div>
+        </div>
+
         <!-- Top Stats Cards Grid -->
         <div class="dashboard-grid-stats">
           <div class="stat-card glass-panel">

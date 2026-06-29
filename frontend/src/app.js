@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async handleFormLogin(e) {
       e.preventDefault();
-      const email = document.getElementById('login-email').value.trim();
+      const loginId = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
 
       const spinner = document.getElementById('login-spinner');
@@ -54,11 +54,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (submitBtn) submitBtn.disabled = true;
 
       try {
-        const res = await API.login({ email, password });
+        const res = await API.login({ loginId, password });
         localStorage.setItem('token', res.token);
 
         Utils.showToast('Login successful! Loading workspace...');
-        // Reset current user cache
         window.currentUser = null;
         window.location.hash = '#/dashboard';
       } catch (err) {
@@ -73,6 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.preventDefault();
       const fullName = document.getElementById('signup-name').value.trim();
       const email = document.getElementById('signup-email').value.trim();
+      const mobileNumber = document.getElementById('signup-mobile').value.trim();
       const password = document.getElementById('signup-password').value;
       const confirmPassword = document.getElementById('signup-confirm').value;
 
@@ -83,16 +83,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (submitBtn) submitBtn.disabled = true;
 
       try {
-        const res = await API.register({ fullName, email, password, confirmPassword });
+        const res = await API.register({ fullName, email, mobileNumber, password, confirmPassword });
         Utils.showToast(res.message);
 
-        // Reset form
         document.getElementById('signup-form').reset();
-
-        // Redirect to login hash
         window.location.hash = '#/login';
 
-        // Pre-fill email
         setTimeout(() => {
           const emailInput = document.getElementById('login-email');
           if (emailInput) emailInput.value = email;
@@ -102,20 +98,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       } finally {
         if (spinner) spinner.classList.add('hidden');
         if (submitBtn) submitBtn.disabled = false;
-      }
-    },
-
-    async handleFormGuestLogin() {
-      try {
-        Utils.showToast('Generating guest sandbox session...');
-        const res = await API.guestLogin();
-        localStorage.setItem('token', res.token);
-
-        Utils.showToast('Guest Login successful!');
-        window.currentUser = null;
-        window.location.hash = '#/dashboard';
-      } catch (err) {
-        Utils.showToast(`Guest session failed: ${err.message}`, 'error');
       }
     },
 
@@ -129,16 +111,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Logout API warning:', err);
       } finally {
         localStorage.removeItem('token');
+        localStorage.clear();
+
+        // Clear all cookies
+        document.cookie.split(";").forEach((c) => {
+          document.cookie = c
+            .replace(/^ +/, "")
+            .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+
         window.currentUser = null;
 
-        // Force timer reset
         if (isTimerRunning) {
           clearInterval(timerInterval);
           isTimerRunning = false;
         }
 
         Utils.showToast('Logged out successfully.');
-        window.location.hash = '#/';
+        window.location.hash = '#/login';
       }
     },
 
@@ -316,6 +306,21 @@ function showAuthView(cardToShow) {
       c.classList.add('hidden');
     }
   });
+
+  API.request('GET', '/auth/check-users')
+    .then(res => {
+      const notice = document.getElementById('zero-users-notice');
+      if (notice) {
+        if (res && res.count === 0) {
+          notice.classList.remove('hidden');
+        } else {
+          notice.classList.add('hidden');
+        }
+      }
+    })
+    .catch(err => {
+      console.warn('Failed to query users count:', err);
+    });
 }
 
 function updateHeaderProfileUI(profile) {

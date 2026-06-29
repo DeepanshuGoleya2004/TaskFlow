@@ -706,4 +706,65 @@ router.post('/system/import', authenticate, authorize(['Admin', 'Member']), asyn
   }
 });
 
+// Imports for Claims/Policies spec
+const Policy = require('../models/Policy');
+const Claim = require('../models/Claim');
+
+// GET user profile details
+router.get('/users/profile', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id, '-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Fetch user profile error:', error);
+    res.status(500).json({ error: 'Failed to retrieve profile' });
+  }
+});
+
+// PUT update user profile details
+router.put('/users/profile', authenticate, async (req, res) => {
+  try {
+    const { fullName, email, mobileNumber } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (fullName) user.fullName = fullName;
+    if (email) user.email = email.toLowerCase();
+    if (mobileNumber) user.mobileNumber = mobileNumber;
+
+    await user.save();
+    res.json({ message: 'Profile updated successfully', user });
+  } catch (error) {
+    console.error('Update user profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// GET user policies list
+router.get('/users/policies', authenticate, async (req, res) => {
+  try {
+    const policies = await Policy.find({ userId: req.user.id });
+    res.json(policies);
+  } catch (error) {
+    console.error('Fetch policies error:', error);
+    res.status(500).json({ error: 'Failed to retrieve policies' });
+  }
+});
+
+// GET user claims list
+router.get('/users/claims', authenticate, async (req, res) => {
+  try {
+    const claims = await Claim.find({ userId: req.user.id });
+    res.json(claims);
+  } catch (error) {
+    console.error('Fetch claims error:', error);
+    res.status(500).json({ error: 'Failed to retrieve claims' });
+  }
+});
+
 module.exports = router;

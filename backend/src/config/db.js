@@ -16,7 +16,6 @@ async function initDatabase() {
     
     // Seed initial collections
     await seedCategories();
-    await seedDefaultUsers();
     
     console.log('Database initialization complete.');
   } catch (error) {
@@ -37,53 +36,6 @@ async function seedCategories() {
     ];
     await Category.insertMany(categories);
     console.log('Categories seeded.');
-  }
-}
-
-async function seedDefaultUsers() {
-  // 1. Seed Admin
-  const adminExists = await User.findOne({ email: 'admin@taskflow.com' });
-  if (!adminExists) {
-    console.log('Seeding default Admin user...');
-    const hashedPassword = await bcrypt.hash('AdminPass123!', 10);
-    await User.create({
-      fullName: 'System Admin',
-      email: 'admin@taskflow.com',
-      password: hashedPassword,
-      role: 'Admin',
-      avatar: 'SA',
-      isGuest: false
-    });
-  }
-
-  // 2. Seed Default Member (Sarah Connor)
-  const memberExists = await User.findOne({ email: 'sarah@taskflow.com' });
-  if (!memberExists) {
-    console.log('Seeding default Member user (Sarah)...');
-    const hashedPassword = await bcrypt.hash('SarahPass123!', 10);
-    await User.create({
-      fullName: 'Sarah Connor',
-      email: 'sarah@taskflow.com',
-      password: hashedPassword,
-      role: 'Member',
-      avatar: 'SC',
-      isGuest: false
-    });
-  }
-
-  // 3. Seed Default Guest
-  const guestExists = await User.findOne({ email: 'guest@taskflow.com' });
-  if (!guestExists) {
-    console.log('Seeding default Guest account...');
-    const hashedPassword = await bcrypt.hash('GuestPass123!', 10);
-    await User.create({
-      fullName: 'Guest User',
-      email: 'guest@taskflow.com',
-      password: hashedPassword,
-      role: 'Guest',
-      avatar: 'GU',
-      isGuest: true
-    });
   }
 }
 

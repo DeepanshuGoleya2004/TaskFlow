@@ -6,20 +6,15 @@ const { authenticate } = require('../middleware/auth');
 
 // Models
 const User = require('../models/User');
-const Category = require('../models/Category');
-const Task = require('../models/Task');
-const Comment = require('../models/Comment');
-const ActivityLog = require('../models/ActivityLog');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_zenith_jwt_key_12345';
 
-// ==========================================
-// 1. User Registration Route
-// ==========================================
+// User Registration Route
 const registerValidation = [
   body('fullName').trim().notEmpty().withMessage('Full Name is required'),
   body('email').isEmail().withMessage('Enter a valid email address').normalizeEmail(),
+  body('mobileNumber').trim().notEmpty().withMessage('Mobile Number is required'),
   body('password')
     .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
     .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
@@ -41,12 +36,18 @@ router.post('/register', registerValidation, async (req, res) => {
   }
 
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, email, mobileNumber, password } = req.body;
 
     // Check if email already registered
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    const emailExists = await User.findOne({ email: email.toLowerCase() });
+    if (emailExists) {
       return res.status(400).json({ error: 'Email address is already in use.' });
+    }
+
+    // Check if mobile number already registered
+    const mobileExists = await User.findOne({ mobileNumber });
+    if (mobileExists) {
+      return res.status(400).json({ error: 'Mobile number is already in use.' });
     }
 
     // Hash password
@@ -59,14 +60,15 @@ router.post('/register', registerValidation, async (req, res) => {
     // Create User
     const newUser = await User.create({
       fullName,
-      email,
+      email: email.toLowerCase(),
+      mobileNumber,
       password: hashedPassword,
       role: 'Member',
       avatar,
       isGuest: false
     });
 
-    res.status(211).json({ 
+    res.status(201).json({ 
       id: newUser._id, 
       message: 'Account created successfully! Redirecting to Login...' 
     });
@@ -76,25 +78,31 @@ router.post('/register', registerValidation, async (req, res) => {
   }
 });
 
-// ==========================================
-// 2. User Login Route
-// ==========================================
+// User Login Route
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { loginId, email, password } = req.body;
+    const identifier = loginId || email; // support both keys
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Email/Mobile and password are required' });
     }
 
-    const user = await User.findOne({ email });
-    if (!user || user.isGuest) {
-      return res.status(401).json({ error: 'Invalid login email or password' });
+    // Search user by email or mobile
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { mobileNumber: identifier }
+      ]
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid login email or password' });
+      return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
     // Generate JWT Token
@@ -106,6 +114,7 @@ router.post('/login', async (req, res) => {
         id: user._id,
         fullName: user.fullName,
         email: user.email,
+        mobileNumber: user.mobileNumber,
         role: user.role,
         avatar: user.avatar,
         isGuest: false
@@ -117,152 +126,37 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ==========================================
-// 3. Guest Login Route (Sandbox Reseeder)
-// ==========================================
-router.post('/guest-login', async (req, res) => {
+// Me Profile Retrieval Endpoint
+router.get('/me', authenticate, async (req, res) => {
   try {
-    const guestUser = await User.findOne({ email: 'guest@taskflow.com' });
-    if (!guestUser) {
-      return res.status(500).json({ error: 'Predefined Guest Account missing in database.' });
+    const user = await User.findById(req.user.id, '-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User session not found.' });
     }
-
-    // 1. Wipe previous Guest Tasks & associated data to sandbox sessions
-    await Task.deleteMany({ user_id: guestUser._id });
-    await Comment.deleteMany({ user_id: guestUser._id });
-    await ActivityLog.deleteMany({ user_id: guestUser._id });
-
-    // 2. Resolve default Categories
-    const designCat = await Category.findOne({ name: 'Design' });
-    const engineeringCat = await Category.findOne({ name: 'Engineering' });
-    const generalCat = await Category.findOne({ name: 'General' });
-
-    // ISO dates offsets
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-    const in3days = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
-    const in5days = new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0];
-    const in7days = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
-
-    // 3. Seed Demo Tasks for Guest User
-    const demoTasks = [
-      {
-        title: 'Design Landing Page',
-        description: 'Design glassmorphic layouts and color scheme details.',
-        status: 'Todo',
-        priority: 'High',
-        category_id: designCat ? designCat._id : null,
-        assignee_id: guestUser._id,
-        user_id: guestUser._id,
-        due_date: tomorrow,
-        estimated_minutes: 240,
-        actual_minutes: 0
-      },
-      {
-        title: 'Learn React Hooks',
-        description: 'Practice useState, useEffect, and custom hooks.',
-        status: 'In Progress',
-        priority: 'Medium',
-        category_id: engineeringCat ? engineeringCat._id : null,
-        assignee_id: guestUser._id,
-        user_id: guestUser._id,
-        due_date: in7days,
-        estimated_minutes: 180,
-        actual_minutes: 45
-      },
-      {
-        title: 'Deploy MERN Project',
-        description: 'Setup Render/Railway servers and MongoDB Atlas connection.',
-        status: 'Todo',
-        priority: 'Urgent',
-        category_id: engineeringCat ? engineeringCat._id : null,
-        assignee_id: guestUser._id,
-        user_id: guestUser._id,
-        due_date: in3days,
-        estimated_minutes: 120,
-        actual_minutes: 0
-      },
-      {
-        title: 'Prepare Interview',
-        description: 'Review JS algorithms and system architecture questions.',
-        status: 'Review',
-        priority: 'Medium',
-        category_id: generalCat ? generalCat._id : null,
-        assignee_id: guestUser._id,
-        user_id: guestUser._id,
-        due_date: in5days,
-        estimated_minutes: 300,
-        actual_minutes: 90
-      },
-      {
-        title: 'Complete Internship Assignment',
-        description: 'Submit the finished task tracker repository.',
-        status: 'Completed',
-        priority: 'High',
-        category_id: generalCat ? generalCat._id : null,
-        assignee_id: guestUser._id,
-        user_id: guestUser._id,
-        due_date: today,
-        estimated_minutes: 120,
-        actual_minutes: 120
-      }
-    ];
-
-    await Task.insertMany(demoTasks);
-
-    // 4. Log creation activity
-    await ActivityLog.create({
-      user_id: guestUser._id,
-      action: 'created',
-      details: 'Guest session sandbox reseeded with default tasks'
-    });
-
-    // 5. Generate JWT Token
-    const token = jwt.sign({ id: guestUser._id }, JWT_SECRET, { expiresIn: '12h' });
-
-    res.json({
-      token,
-      user: {
-        id: guestUser._id,
-        fullName: guestUser.fullName,
-        email: guestUser.email,
-        role: guestUser.role,
-        avatar: guestUser.avatar,
-        isGuest: true
-      }
-    });
+    res.json(user);
   } catch (error) {
-    console.error('Guest Login API Error:', error.message);
-    res.status(500).json({ error: 'Failed to initialize Guest session.' });
+    console.error('Me Session API Error:', error.message);
+    res.status(500).json({ error: 'Failed to retrieve active session.' });
   }
 });
 
-// ==========================================
-// 4. User Profile Details & Statistics Route
-// ==========================================
+// User Profile Details Route
 router.get('/profile', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
-    
-    // Fetch stats for profile page
-    const totalTasks = await Task.countDocuments({ user_id: userId });
-    const completedTasks = await Task.countDocuments({ user_id: userId, status: 'Completed' });
-    const completionPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    
-    const dbUser = await User.findById(userId);
+    const dbUser = await User.findById(userId, '-password');
+    if (!dbUser) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
 
     res.json({
       fullName: dbUser.fullName,
       email: dbUser.email,
+      mobileNumber: dbUser.mobileNumber,
       role: dbUser.role,
       avatar: dbUser.avatar,
       isGuest: dbUser.isGuest,
-      joinedDate: dbUser.createdAt,
-      stats: {
-        total_tasks: totalTasks,
-        completed_tasks: completedTasks,
-        completion_percent: completionPercent
-      }
+      joinedDate: dbUser.createdAt
     });
   } catch (error) {
     console.error('Profile API Error:', error.message);
@@ -270,22 +164,25 @@ router.get('/profile', authenticate, async (req, res) => {
   }
 });
 
-// ==========================================
-// 5. User Logout Endpoint
-// ==========================================
+// User Logout Endpoint
 router.post('/logout', authenticate, async (req, res) => {
   try {
-    if (req.user.isGuest) {
-      // Clear guest specific tasks on exit
-      await Task.deleteMany({ user_id: req.user.id });
-      await Comment.deleteMany({ user_id: req.user.id });
-      await ActivityLog.deleteMany({ user_id: req.user.id });
-    }
-    
+    res.clearCookie('token');
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout API Error:', error.message);
     res.status(500).json({ error: 'Error processing logout.' });
+  }
+});
+
+// Check registered users count
+router.get('/check-users', async (req, res) => {
+  try {
+    const count = await User.countDocuments();
+    res.json({ count });
+  } catch (error) {
+    console.error('Check users count error:', error.message);
+    res.status(500).json({ error: 'Failed to retrieve user count.' });
   }
 });
 

@@ -14,7 +14,7 @@
   
   <!-- Chart.js CDN for Animated Metrics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script type="module" crossorigin src="/assets/index-QFau0Lts.js"></script>
+  <script type="module" crossorigin src="/assets/index-CzPTQRDk.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-CsIgo5Og.css">
 </head>
 <body>
@@ -56,9 +56,6 @@
       <div class="hero-buttons">
         <a href="#/signup" class="btn btn-primary">Get Started</a>
         <a href="#/login" class="btn btn-secondary">Login</a>
-        <button type="button" class="btn btn-guest-auth" style="width: auto; padding: 0.8rem 1.8rem;" onclick="app.handleFormGuestLogin()">
-          ⚡ Continue as Guest
-        </button>
       </div>
 
       <!-- Mockup Dashboard Preview Container -->
@@ -303,9 +300,6 @@
         <p>Join TaskFlow today and organize your workspace tasks with precision.</p>
         <div class="cta-buttons">
           <a href="#/signup" class="btn btn-primary">Get Started</a>
-          <button type="button" class="btn btn-guest-auth" style="width: auto; padding: 0.8rem 1.8rem;" onclick="app.handleFormGuestLogin()">
-            ⚡ Continue as Guest
-          </button>
         </div>
       </div>
     </section>
@@ -347,6 +341,10 @@
        2. AUTHENTICATION SCREENS VIEW
        ========================================== -->
   <div class="auth-container hidden" id="auth-view">
+    <!-- Zero Users Alert Container -->
+    <div id="zero-users-notice" class="hidden" style="background: rgba(139, 92, 246, 0.12); border: 1px solid var(--primary); padding: 0.8rem 1.2rem; border-radius: var(--radius-md); text-align: center; color: var(--text-primary); margin-bottom: 1.5rem; font-weight: 500; font-size: 0.9rem; width: 100%; max-width: 420px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);">
+      Create your account to get started.
+    </div>
     
     <!-- Login Card -->
     <div class="auth-card" id="login-card">
@@ -359,8 +357,8 @@
       
       <form id="login-form" onsubmit="app.handleFormLogin(event)">
         <div class="form-group">
-          <label for="login-email">Email Address</label>
-          <input type="email" id="login-email" class="form-control" placeholder="e.g. sarah@taskflow.com" required autocomplete="email">
+          <label for="login-email">Email or Mobile Number</label>
+          <input type="text" id="login-email" class="form-control" placeholder="e.g. sarah@taskflow.com or 9876543210" required>
         </div>
         <div class="form-group">
           <label for="login-password">Password</label>
@@ -384,12 +382,6 @@
         </button>
       </form>
 
-      <div class="auth-separator"><span>OR</span></div>
-
-      <button type="button" class="btn btn-secondary btn-guest-auth" onclick="app.handleFormGuestLogin()">
-        🚀 Continue as Guest
-      </button>
-
       <p class="auth-footer">
         Don't have an account? <a href="#/signup">Sign Up</a>
       </p>
@@ -412,6 +404,10 @@
         <div class="form-group">
           <label for="signup-email">Email Address</label>
           <input type="email" id="signup-email" class="form-control" placeholder="sarah@taskflow.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="signup-mobile">Mobile Number</label>
+          <input type="tel" id="signup-mobile" class="form-control" placeholder="e.g. 9876543210" required autocomplete="tel">
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
           <div class="form-group">

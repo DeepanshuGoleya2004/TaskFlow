@@ -1330,6 +1330,376 @@ const Components = {
     } catch (err) {
       container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--priority-urgent);">Failed to load profile details: ${err.message}</div>`;
     }
+  },
+
+  async renderClaims(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading workflow status...</div>';
+
+    try {
+      const workflow = await API.request('GET', '/claims/workflow');
+      
+      let currentStepNum = 3; // Step 1 & 2 (Register, Login) are implicitly true if we are here
+      if (workflow.claimSubmitted) currentStepNum = 11;
+      else if (workflow.claimReviewed) currentStepNum = 10;
+      else if (workflow.garageSelected) currentStepNum = 9;
+      else if (workflow.claimEstimated) currentStepNum = 8;
+      else if (workflow.damageAnalysisCompleted) currentStepNum = 7;
+      else if (workflow.documentsUploaded) currentStepNum = 6;
+      else if (workflow.incidentReported) currentStepNum = 5;
+      else if (workflow.policyVerified) currentStepNum = 4;
+      else if (workflow.profileCompleted) currentStepNum = 3;
+      
+      const progressPercent = Math.round((currentStepNum / 11) * 100);
+
+      const statusIcon = (isCompleted, isCurrent) => {
+        if (isCompleted) return '<span style="color: var(--color-completed); margin-right: 0.5rem;">✓</span>';
+        if (isCurrent) return '<span style="color: var(--accent-pink); margin-right: 0.5rem; font-weight: bold;">⏳</span>';
+        return '<span style="color: var(--text-muted); margin-right: 0.5rem;">⬜</span>';
+      };
+
+      const itemStyle = (isCompleted, isCurrent) => {
+        if (isCompleted) return 'color: var(--text-primary); font-weight: 500; margin-bottom: 0.6rem; font-size: 0.85rem; display: flex; align-items: center;';
+        if (isCurrent) return 'color: var(--accent-pink); font-weight: 700; margin-bottom: 0.6rem; font-size: 0.85rem; display: flex; align-items: center;';
+        return 'color: var(--text-muted); margin-bottom: 0.6rem; font-size: 0.85rem; display: flex; align-items: center;';
+      };
+
+      window.claimsWizard = {
+        async verifyPolicy() {
+          const num = document.getElementById('claim-policy-num').value.trim();
+          if (!num) {
+            Utils.showToast('Please enter a valid Policy Number', 'error');
+            return;
+          }
+          try {
+            Utils.showToast('Verifying policy with insurance grid...');
+            await API.request('POST', '/claims/workflow', {
+              policyVerified: true,
+              policyDetails: { policyNumber: num, provider: 'TaskFlow Insurance Ltd', amount: 50000 }
+            });
+            Utils.showToast('Policy Verified Successfully!');
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async submitIncident() {
+          const desc = document.getElementById('claim-incident-desc').value.trim();
+          const loc = document.getElementById('claim-incident-loc').value.trim();
+          const date = document.getElementById('claim-incident-date').value;
+          if (!desc || !loc || !date) {
+            Utils.showToast('Please complete all incident details', 'error');
+            return;
+          }
+          try {
+            await API.request('POST', '/claims/workflow', {
+              incidentReported: true,
+              incidentDetails: { description: desc, location: loc, date }
+            });
+            Utils.showToast('Incident Report Filed!');
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async uploadDocs() {
+          try {
+            Utils.showToast('Uploading incident photos and ID scans...');
+            await API.request('POST', '/claims/workflow', {
+              documentsUploaded: true,
+              uploadedDocs: ['car_front_dent.png', 'license_scan.jpg', 'policy_holder_signature.pdf']
+            });
+            Utils.showToast('All mandatory documents uploaded!');
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async startAiAnalysis() {
+          const btn = document.getElementById('btn-start-ai');
+          const spinner = document.getElementById('ai-spinner');
+          if (btn) btn.disabled = true;
+          if (spinner) spinner.classList.remove('hidden');
+
+          setTimeout(async () => {
+            try {
+              await API.request('POST', '/claims/workflow', {
+                damageAnalysisCompleted: true,
+                aiAssessment: { score: '87%', damageLevel: 'Medium Body Damage', repairsRequired: ['Front Bumper', 'Right Wing Quarter-Panel'] }
+              });
+              Utils.showToast('AI Damage Assessment Complete!');
+              Components.renderClaims(containerId);
+            } catch (err) {
+              Utils.showToast(err.message, 'error');
+            }
+          }, 2000);
+        },
+
+        async acceptEstimation() {
+          try {
+            await API.request('POST', '/claims/workflow', {
+              claimEstimated: true,
+              estimationDetails: { approvedAmount: 3280, laborHours: 12, deductible: 250 }
+            });
+            Utils.showToast('Estimation accepted!');
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async confirmGarage() {
+          const select = document.getElementById('claim-garage-select');
+          if (!select) return;
+          const garage = select.value;
+          try {
+            await API.request('POST', '/claims/workflow', {
+              garageSelected: true,
+              selectedGarage: garage
+            });
+            Utils.showToast(`Selected repair shop: ${garage}`);
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async approveReview() {
+          try {
+            await API.request('POST', '/claims/workflow', {
+              claimReviewed: true
+            });
+            Utils.showToast('Claim details reviewed!');
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        },
+
+        async resetWorkflow() {
+          try {
+            Utils.showToast('Resetting claims workflow...');
+            await API.request('POST', '/claims/workflow', {
+              policyVerified: false,
+              incidentReported: false,
+              documentsUploaded: false,
+              damageAnalysisCompleted: false,
+              claimEstimated: false,
+              garageSelected: false,
+              claimReviewed: false,
+              claimSubmitted: false,
+              policyDetails: null,
+              incidentDetails: null,
+              uploadedDocs: [],
+              aiAssessment: null,
+              estimationDetails: null,
+              selectedGarage: null
+            });
+            Components.renderClaims(containerId);
+          } catch (err) {
+            Utils.showToast(err.message, 'error');
+          }
+        }
+      };
+
+      container.innerHTML = `
+        <div style="display: grid; grid-template-columns: 280px 1fr; gap: 2rem; align-items: start; animation: fadeIn 0.4s ease; text-align: left;">
+          
+          <!-- Progress Tracker Side Panel -->
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 1.5rem;">
+            <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary); font-family: var(--font-heading);">Claims Progress</h3>
+            <div style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 1.2rem;">
+              <div style="width: ${progressPercent}%; height: 100%; background: linear-gradient(90deg, var(--accent-pink), var(--primary)); transition: width 0.3s ease;"></div>
+            </div>
+            <p style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 1.5rem;">
+              Progress: <span style="color: var(--accent-pink);">${progressPercent}% Complete</span>
+            </p>
+            
+            <ul style="list-style: none; padding: 0; margin: 0;">
+              <li style="${itemStyle(true, false)}">${statusIcon(true, false)} User Register</li>
+              <li style="${itemStyle(true, false)}">${statusIcon(true, false)} Active Login</li>
+              <li style="${itemStyle(workflow.profileCompleted, currentStepNum === 3)}">${statusIcon(workflow.profileCompleted, currentStepNum === 3)} Complete Profile</li>
+              <li style="${itemStyle(workflow.policyVerified, currentStepNum === 4)}">${statusIcon(workflow.policyVerified, currentStepNum === 4)} Policy Verification</li>
+              <li style="${itemStyle(workflow.incidentReported, currentStepNum === 5)}">${statusIcon(workflow.incidentReported, currentStepNum === 5)} Incident Report</li>
+              <li style="${itemStyle(workflow.documentsUploaded, currentStepNum === 6)}">${statusIcon(workflow.documentsUploaded, currentStepNum === 6)} Upload Documents</li>
+              <li style="${itemStyle(workflow.damageAnalysisCompleted, currentStepNum === 7)}">${statusIcon(workflow.damageAnalysisCompleted, currentStepNum === 7)} AI Damage Analysis</li>
+              <li style="${itemStyle(workflow.claimEstimated, currentStepNum === 8)}">${statusIcon(workflow.claimEstimated, currentStepNum === 8)} Claim Estimation</li>
+              <li style="${itemStyle(workflow.garageSelected, currentStepNum === 9)}">${statusIcon(workflow.garageSelected, currentStepNum === 9)} Garage Selection</li>
+              <li style="${itemStyle(workflow.claimReviewed, currentStepNum === 10)}">${statusIcon(workflow.claimReviewed, currentStepNum === 10)} Claim Review</li>
+              <li style="${itemStyle(workflow.claimSubmitted, currentStepNum === 11)}">${statusIcon(workflow.claimSubmitted, currentStepNum === 11)} Claim Submission</li>
+            </ul>
+
+            <button class="btn btn-secondary btn-sm" onclick="claimsWizard.resetWorkflow()" style="margin-top: 1.5rem; width: 100%; border-color: rgba(220,53,69,0.3); color: var(--priority-urgent);">
+              Reset Claims Flow
+            </button>
+          </div>
+
+          <!-- Wizard Core View Card -->
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 2rem;">
+            
+            ${(() => {
+              switch (currentStepNum) {
+                case 3:
+                  return `
+                    <h2>Step 3: Complete Profile Details</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">To submit insurance claims, you must populate your account profile with a valid Full Name, Email, and Mobile Number.</p>
+                    <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.3); padding: 1rem; border-radius: var(--radius-md); color: var(--text-primary); margin-bottom: 1.5rem;">
+                      ⚠️ Profile is currently incomplete.
+                    </div>
+                    <button class="btn btn-primary" onclick="window.location.hash = '#/profile'">
+                      Go to Profile Details Page →
+                    </button>
+                  `;
+                case 4:
+                  return `
+                    <h2>Step 4: Policy Verification</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Enter your auto insurance policy identifier code to bind and verify coverage details.</p>
+                    <div class="form-group" style="margin-bottom: 1.5rem; max-width: 400px;">
+                      <label style="display: block; margin-bottom: 0.5rem;">Policy Identifier Code</label>
+                      <input type="text" id="claim-policy-num" class="form-control" placeholder="e.g. POL-98745" value="POL-49271">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="claimsWizard.verifyPolicy()">
+                      Verify Policy Number →
+                    </button>
+                  `;
+                case 5:
+                  return `
+                    <h2>Step 5: Incident Report</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Provide accurate accident summary details to describe the body collision incident.</p>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                      <label style="display: block; margin-bottom: 0.5rem;">Date of Collision</label>
+                      <input type="date" id="claim-incident-date" class="form-control" style="max-width: 250px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                      <label style="display: block; margin-bottom: 0.5rem;">Location of Incident</label>
+                      <input type="text" id="claim-incident-loc" class="form-control" placeholder="e.g. 5th Avenue Crossing, New York">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                      <label style="display: block; margin-bottom: 0.5rem;">Description of Accident</label>
+                      <textarea id="claim-incident-desc" class="form-control" rows="3" placeholder="Describe how the crash occurred..."></textarea>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="claimsWizard.submitIncident()">
+                      Submit Incident Details →
+                    </button>
+                  `;
+                case 6:
+                  return `
+                    <h2>Step 6: Upload Mandatory Documents</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Submit pictures of driver license identification card and vehicle crash damage signs.</p>
+                    <div style="background: rgba(255,255,255,0.02); border: 2px dashed var(--border-glass); border-radius: var(--radius-md); padding: 2rem; text-align: center; margin-bottom: 1.5rem;">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="margin-bottom: 0.8rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                      <p style="margin: 0; font-size: 0.9rem; color: var(--text-secondary);">Click below to simulate uploading driving_license.jpg and car_front_dent.png</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="claimsWizard.uploadDocs()">
+                      Upload Mandatory Documents →
+                    </button>
+                  `;
+                case 7:
+                  return `
+                    <h2>Step 7: AI Body Damage Assessment</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Trigger the TaskFlow artificial intelligence vision models to estimate dent and scratch depths.</p>
+                    <div style="margin-bottom: 1.5rem;">
+                      <button class="btn btn-primary" id="btn-start-ai" onclick="claimsWizard.startAiAnalysis()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                        <span>Run AI Claims Scanner</span>
+                        <span class="spinner hidden" id="ai-spinner" style="width: 14px; height: 14px;"></span>
+                      </button>
+                    </div>
+                  `;
+                case 8:
+                  return `
+                    <h2>Step 8: Automated Claims Cost Estimation</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">The AI claims assessment engine has generated the following collision repair quote details:</p>
+                    <div style="background: rgba(139,92,246,0.08); border: 1px solid var(--border-glass); padding: 1.2rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                      <div><strong>Estimated Auto Repair Parts:</strong> $2,280.00</div>
+                      <div><strong>Est. Mechanic Labor Charge:</strong> $1,000.00</div>
+                      <div><strong>Estimated Total Quote:</strong> $3,280.00</div>
+                      <div style="border-top: 1px solid var(--border-glass); margin-top: 0.5rem; padding-top: 0.5rem; color: var(--accent-pink);">
+                        <strong>Net Approved Payout (Excl. $250 Deductible):</strong> $3,030.00
+                      </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="claimsWizard.acceptEstimation()">
+                      Accept Quote & Proceed →
+                    </button>
+                  `;
+                case 9:
+                  return `
+                    <h2>Step 9: Direct Repair Garage Selection</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Choose from our list of verified direct-repair partner repair garages in your area.</p>
+                    <div class="form-group" style="margin-bottom: 1.5rem; max-width: 400px;">
+                      <label style="display: block; margin-bottom: 0.5rem;">Select Auto Service Repair Shop</label>
+                      <select id="claim-garage-select" class="form-control" style="background: #1a1a24; color: #fff;">
+                        <option value="Apex Dent & Collision (Brooklyn)">Apex Dent & Collision Repair Shop</option>
+                        <option value="Metro Auto Refinishing (Queens)">Metro Auto Refinishing Shop</option>
+                        <option value="Precision Collision Specialists (Manhattan)">Precision Collision Specialists Shop</option>
+                      </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="claimsWizard.confirmGarage()">
+                      Confirm Garage Choice →
+                    </button>
+                  `;
+                case 10:
+                  return `
+                    <h2>Step 10: General Claims Policy & Incident Review</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Please review your complete digital insurance claims filing details before submission.</p>
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 1.2rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem;">
+                      <div><strong>Policy No:</strong> ${workflow.policyDetails?.policyNumber || 'N/A'}</div>
+                      <div><strong>Incident Date:</strong> ${workflow.incidentDetails?.date || 'N/A'}</div>
+                      <div><strong>Incident Location:</strong> ${workflow.incidentDetails?.location || 'N/A'}</div>
+                      <div><strong>AI Estimated Repairs:</strong> Front Bumper, Right Wing Quarter-Panel</div>
+                      <div><strong>Approved Deductible Net:</strong> $3,030.00</div>
+                      <div><strong>Chosen Service Garage:</strong> ${workflow.selectedGarage || 'N/A'}</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="claimsWizard.approveReview()">
+                      Confirm Details & Submit Claim →
+                    </button>
+                  `;
+                case 11:
+                  return `
+                    <h2>Step 11: Claim Submission Completed</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Your incident claim reports have been submitted. The adjusters will verify repairs soon.</p>
+                    
+                    <div style="background: rgba(40,167,69,0.1); border: 1px solid rgba(40,167,69,0.3); padding: 1.2rem; border-radius: var(--radius-md); text-align: center; color: var(--color-completed); font-weight: 600; margin-bottom: 2rem;">
+                      🎉 Digital Claim Submitted to Insurance Broker Network
+                    </div>
+
+                    <h4 style="margin-bottom: 1rem;">Track Adjuster Status</h4>
+                    <div style="display: flex; justify-content: space-between; position: relative; margin-top: 1.5rem; padding: 0 1rem;">
+                      <div style="position: absolute; top: 12px; left: 10%; right: 10%; height: 2px; background: var(--border-glass); z-index: 1;">
+                        <div style="width: 50%; height: 100%; background: var(--color-completed);"></div>
+                      </div>
+                      <div style="z-index: 2; text-align: center;">
+                        <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--color-completed); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; margin: 0 auto 0.5rem;">✓</div>
+                        <span style="font-size: 0.8rem; font-weight: 600;">Filed</span>
+                      </div>
+                      <div style="z-index: 2; text-align: center;">
+                        <div style="width: 26px; height: 26px; border-radius: 50%; background: var(--accent-pink); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; margin: 0 auto 0.5rem; font-weight: bold;">⏳</div>
+                        <span style="font-size: 0.8rem; font-weight: 600; color: var(--accent-pink);">Adjuster Review</span>
+                      </div>
+                      <div style="z-index: 2; text-align: center;">
+                        <div style="width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,0.1); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; margin: 0 auto 0.5rem;">3</div>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">Disbursed</span>
+                      </div>
+                    </div>
+                  `;
+                default:
+                  return `<div>No active claims workflow step details.</div>`;
+              }
+            })()}
+
+          </div>
+
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--priority-urgent);">Failed to render workflow status: ${err.message}</div>`;
+    }
   }
 };
 

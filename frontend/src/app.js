@@ -302,6 +302,7 @@ async function handleRouting() {
     list: { title: 'Task List', subtitle: 'Filterable list grid view' },
     calendar: { title: 'Calendar', subtitle: 'Deadlines and schedules tracker' },
     logs: { title: 'Activity Logs', subtitle: 'System event log auditing' },
+    claims: { title: 'Claims Flow', subtitle: 'Step-by-step progress tracking workflow' },
     settings: { title: 'Settings', subtitle: 'Manage categories and import/export workspace data' }
   };
 
@@ -410,6 +411,12 @@ function renderActiveView(view) {
       break;
     case 'settings':
       Components.renderSettings('view-settings');
+      break;
+    case 'profile':
+      Components.renderProfile('view-profile');
+      break;
+    case 'claims':
+      Components.renderClaims('view-claims');
       break;
     default:
       console.warn(`Unknown view type requested: ${view}`);

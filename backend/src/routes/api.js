@@ -767,4 +767,54 @@ router.get('/users/claims', authenticate, async (req, res) => {
   }
 });
 
+// Claims Workflow Progress Tracking endpoints
+const ClaimWorkflow = require('../models/ClaimWorkflow');
+
+// GET active claim progress workflow
+router.get('/claims/workflow', authenticate, async (req, res) => {
+  try {
+    let workflow = await ClaimWorkflow.findOne({ userId: req.user.id });
+    if (!workflow) {
+      const user = await User.findById(req.user.id);
+      const profileCompleted = !!(user && user.fullName && user.email && user.mobileNumber);
+      workflow = await ClaimWorkflow.create({
+        userId: req.user.id,
+        profileCompleted
+      });
+    } else {
+      const user = await User.findById(req.user.id);
+      const isComplete = !!(user && user.fullName && user.email && user.mobileNumber);
+      if (workflow.profileCompleted !== isComplete) {
+        workflow.profileCompleted = isComplete;
+        await workflow.save();
+      }
+    }
+    res.json(workflow);
+  } catch (error) {
+    console.error('Fetch claim workflow error:', error);
+    res.status(500).json({ error: 'Failed to retrieve workflow status.' });
+  }
+});
+
+// POST update claim progress workflow step
+router.post('/claims/workflow', authenticate, async (req, res) => {
+  try {
+    const updateData = req.body;
+    let workflow = await ClaimWorkflow.findOne({ userId: req.user.id });
+    if (!workflow) {
+      workflow = new ClaimWorkflow({ userId: req.user.id });
+    }
+
+    Object.keys(updateData).forEach(key => {
+      workflow[key] = updateData[key];
+    });
+
+    await workflow.save();
+    res.json({ message: 'Workflow progress saved successfully', workflow });
+  } catch (error) {
+    console.error('Update claim workflow error:', error);
+    res.status(500).json({ error: 'Failed to update workflow status.' });
+  }
+});
+
 module.exports = router;

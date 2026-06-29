@@ -1,7 +1,7 @@
 {
-  "name": "task-tracker-backend",
+  "name": "taskflow-backend",
   "version": "1.0.0",
-  "description": "Task Tracker API Service Backend",
+  "description": "TaskFlow API Service Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

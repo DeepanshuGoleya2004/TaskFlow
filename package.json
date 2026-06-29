@@ -1,7 +1,7 @@
 {
-  "name": "task-tracker-workspace",
+  "name": "taskflow-workspace",
   "version": "2.0.0",
-  "description": "Premium Task Tracker Workspace Workspace Runner",
+  "description": "TaskFlow Workspace Runner",
   "scripts": {
     "install-all": "npm install --prefix backend && npm install --prefix frontend",
     "dev-backend": "npm run dev --prefix backend",

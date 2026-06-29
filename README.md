@@ -1,6 +1,6 @@
-# TaskFlow AI | Decoupled MERN Architecture
+# TaskFlow | Decoupled MERN Architecture
 
-TaskFlow AI is next-generation project management and focus tracker workspace designed to streamline workflows, record time logs, and generate reports.
+TaskFlow is next-generation project management and focus tracker workspace designed to streamline workflows, record time logs, and generate reports.
 
 This repository is refactored into a separate **Frontend Presentation Layer** (Vite SPA) and **Backend REST Service Layer** (Node, Express, and MongoDB).
 
